@@ -64,26 +64,15 @@ public class HuffmanTree {
         try {
             BufferedInputStream ins = 
                 new BufferedInputStream(new FileInputStream(fileName));
-            
+
+            // build Huffman tree
             // count number of each byte
             int[] counts = new int[256];
             for (int i = 0; i < fileSize; i++) {
                 byte b = (byte)ins.read();
                 counts[(int)(b&0x0FF)]++;
             }
-
-            // create tree nodes and put them in a min heap
-            PriorityQueue<TreeNode> heap = new PriorityQueue<TreeNode>();
-            for (int i = 0; i < 256; i++) {
-                if (counts[i] > 0) {
-                    TreeNode node = new TreeNode((byte)(i&0xFF), counts[i]);
-                    heap.add(node);
-                }
-            }
-            nodeNum = heap.size();
-
-            // build Huffman tree
-            this.root = buildTree(heap);
+            this.root = buildTree(counts);
             
             ins.close();
         }
@@ -155,6 +144,7 @@ public class HuffmanTree {
                 byte b = (byte)ins.read();
                 TreeNode node = map.get(b);
                 for (byte c: node.encode) {
+                    //System.out.println(c);
                     crt = (byte)(crt|(c<<index));
                     index++;
                     if (index == 8) {
@@ -165,6 +155,9 @@ public class HuffmanTree {
                     }
                     compressedSize++;
                 }
+            }
+            if (index < 8) {
+                outs.write(crt);
             }
 
             ins.close();
@@ -192,7 +185,7 @@ public class HuffmanTree {
         }
 
         try {
-            // start encoding
+            // start decoding
             BufferedInputStream ins = 
                 new BufferedInputStream(new FileInputStream(zzipFile));
 
@@ -200,33 +193,37 @@ public class HuffmanTree {
             byte[] barray = new byte[8];
             ins.read(barray, 0, 8);
             fileSize = ByteBuffer.wrap(barray).getLong();
+            System.out.println("file size = "+fileSize);
             // read number of treeNodes
             barray = new byte[4];
             ins.read(barray, 0, 4);
             nodeNum = ByteBuffer.wrap(barray).getInt();
+            System.out.println("nodeNum = "+nodeNum);
             // start reading treeNodes and create the huffman tree
-            PriorityQueue<TreeNode> heap = new PriorityQueue<TreeNode>();
+            int[] counts = new int[256];
+            //System.out.println("reading ...");
             for (int i = 0; i < nodeNum; i++) {
                 byte b = (byte)ins.read();
                 ins.read(barray, 0, 4);
                 int cnt = ByteBuffer.wrap(barray).getInt();
-                TreeNode node = new TreeNode(b, cnt);
-                heap.add(node);
+                //System.out.println("byte "+ b + " " + cnt);
+                counts[(int)(b&0x0FF)] = cnt;
             }
-            nodeNum = heap.size();
-            this.root = buildTree(heap); // build tree
-
+            //System.out.println("end reading");
+            this.root = buildTree(counts); // build tree
+            
             // start decoding
             String originFileName = zzipFile.substring(0, zzipFile.length() - 5);
             BufferedOutputStream outs = 
-                new BufferedOutputStream(new FileOutputStream(originFileName));
+                new BufferedOutputStream(new FileOutputStream(originFileName + ".out"));
 
             int crtSize = 0, index = 0;
             byte crtByte = (byte)ins.read();
             TreeNode tracer = root;
             while (crtSize < fileSize) {
                 // trace from root to decode next byte
-                while (tracer.left != null || tracer.right.right != null) {
+                while (tracer.left != null || tracer.right != null) {
+                    //System.out.println((crtByte>>index)&0x1);
                     if ((crtByte & (0x1<<index)) == 0) {
                         tracer = tracer.left;
                     }
@@ -256,10 +253,21 @@ public class HuffmanTree {
 
     /**
      * build huffman tree
-     * @param heap a min heap containing all nodes
+     * @param counts count array of all bytes
      * @return tree root
      */
-    private TreeNode buildTree(PriorityQueue<TreeNode> heap) {
+    private TreeNode buildTree(int[] counts) {
+        // create tree nodes and put them in a min heap
+        PriorityQueue<TreeNode> heap = new PriorityQueue<TreeNode>();
+        for (int i = 0; i < 256; i++) {
+            if (counts[i] > 0) {
+                TreeNode node = new TreeNode((byte)(i&0xFF), counts[i]);
+                heap.add(node);
+                //System.out.println("byte "+ i + " " + counts[i]);
+            }
+        }
+        nodeNum = heap.size();
+
         if (nodeNum == 1) { // edge case
             TreeNode node1 = heap.poll();
             TreeNode node2 = new TreeNode((byte)0, 0);
@@ -284,6 +292,10 @@ public class HuffmanTree {
         HuffmanTree huftree = new HuffmanTree("testFile");
         huftree.createHuffmanTree();
         huftree.compressFile();
+
+        huftree = new HuffmanTree("testFile");
+        huftree.decompress("testFile.zzip");
+
         return;
     }
 }
