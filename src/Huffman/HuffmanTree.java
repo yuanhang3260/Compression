@@ -97,12 +97,12 @@ public class HuffmanTree {
             ByteBuffer bBuf = ByteBuffer.allocate(8);
             bBuf.putLong(fileSize);
             outs.write(bBuf.array(), 0, 8);
-            // this 8 bytes is temporarily saved for compressed size
-            //outs.write(bBuf.array(), 0, 8);
+            
             // write number of treeNodes
             bBuf = ByteBuffer.allocate(4);
             bBuf.putInt(nodeNum);
             outs.write(bBuf.array(), 0, 4);
+            
             // traverse the huffman tree and write treeNodes to .zzip file
             HashMap<Byte, TreeNode> map = new HashMap<Byte, TreeNode>();
             Stack<TreeNode> stack = new Stack<TreeNode>();
@@ -193,23 +193,20 @@ public class HuffmanTree {
             byte[] barray = new byte[8];
             ins.read(barray, 0, 8);
             fileSize = ByteBuffer.wrap(barray).getLong();
-            System.out.println("file size = "+fileSize);
+            
             // read number of treeNodes
             barray = new byte[4];
             ins.read(barray, 0, 4);
             nodeNum = ByteBuffer.wrap(barray).getInt();
-            System.out.println("nodeNum = "+nodeNum);
+            
             // start reading treeNodes and create the huffman tree
             int[] counts = new int[256];
-            //System.out.println("reading ...");
             for (int i = 0; i < nodeNum; i++) {
                 byte b = (byte)ins.read();
                 ins.read(barray, 0, 4);
                 int cnt = ByteBuffer.wrap(barray).getInt();
-                //System.out.println("byte "+ b + " " + cnt);
                 counts[(int)(b&0x0FF)] = cnt;
             }
-            //System.out.println("end reading");
             this.root = buildTree(counts); // build tree
             
             // start decoding
@@ -223,7 +220,6 @@ public class HuffmanTree {
             while (crtSize < fileSize) {
                 // trace from root to decode next byte
                 while (tracer.left != null || tracer.right != null) {
-                    //System.out.println((crtByte>>index)&0x1);
                     if ((crtByte & (0x1<<index)) == 0) {
                         tracer = tracer.left;
                     }
@@ -263,7 +259,6 @@ public class HuffmanTree {
             if (counts[i] > 0) {
                 TreeNode node = new TreeNode((byte)(i&0xFF), counts[i]);
                 heap.add(node);
-                //System.out.println("byte "+ i + " " + counts[i]);
             }
         }
         nodeNum = heap.size();
