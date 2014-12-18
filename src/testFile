@@ -17,7 +17,7 @@ import java.nio.ByteBuffer;
  * HuffmanTree
  * @author Hang Yuan
  */
-public class HuffmanTree {
+public class HuffmanTree implements Serializable {
 
     /*
      * Huffman Tree Node
@@ -50,7 +50,7 @@ public class HuffmanTree {
      * constructor
      * @param fileName file to be compressed
      */
-    public HuffmanTree(String fileName) {
+    public void HuffmanTree(String fileName) {
         this.fileName = fileName;
     }
 
@@ -82,9 +82,24 @@ public class HuffmanTree {
             }
             nodeNum = heap.size();
 
-            // build Huffman tree
-            this.root = buildTree(heap);
-            
+            // biuld Huffman tree
+            if (nodeNum == 1) { // edge case
+                TreeNode node1 = heap.poll();
+                TreeNode node2 = new TreeNode((byte)0, 0);
+                TreeNode newNode = new TreeNode((byte)0, node1.count + node2.count);
+                newNode.left = node1;
+                newNode.right = node2;
+                heap.add(newNode);
+            }
+            for (int i = 0; i < nodeNum - 1; i++) {
+                TreeNode node1 = heap.poll();
+                TreeNode node2 = heap.poll();
+                TreeNode newNode = new TreeNode((byte)0, node1.count + node2.count);
+                newNode.left = node1;
+                newNode.right = node2;
+                heap.add(newNode);
+            }
+            this.root = heap.poll(); // final node is root
             ins.close();
         }
         catch (IOException e) {
@@ -94,25 +109,25 @@ public class HuffmanTree {
 
     /**
      * compressFile
-     * | original size | treeNode num | tree nodes  | data  |
-     * |   8 bytes     |    4bytes    |  {b, cnt}   | ..... |
-     * @return decoded bit size
+     * | original size | compressed size | treeNode num | tree nodes  | bytes |
+     * |   8 bytes     |     8 bytes     |    4bytes    |   {b, cnt}  | ..... |
+     * @return compressed file size
      */
-    public long compressFile() {
+    public int compressFile() {
         File file = new File(fileName);
         try {
             BufferedOutputStream outs = 
-                new BufferedOutputStream(new FileOutputStream(fileName + ".zzip"));
+                new BufferedOutputStream(new FileOutputStream(fileName + "zzip"));
 
             // write original file size
             ByteBuffer bBuf = ByteBuffer.allocate(8);
             bBuf.putLong(fileSize);
             outs.write(bBuf.array(), 0, 8);
             // this 8 bytes is temporarily saved for compressed size
-            //outs.write(bBuf.array(), 0, 8);
+            outs.write(bBuf.array(), 0, 8);
             // write number of treeNodes
             bBuf = ByteBuffer.allocate(4);
-            bBuf.putInt(nodeNum);
+            bBuf.putLong(nodeNum);
             outs.write(bBuf.array(), 0, 4);
             // traverse the huffman tree and write treeNodes to .zzip file
             HashMap<Byte, TreeNode> map = new HashMap<Byte, TreeNode>();
@@ -173,115 +188,11 @@ public class HuffmanTree {
         catch (IOException e) {
            e.printStackTrace();
         }
-        return compressedSize;
+        return 0;
     }
-
-    /**
-     * decompress File
-     * @param zzipFile zzip file name
-     * @return decompressed file size
-     */
-    public long decompress(String zzipFile) {
-        if (zzipFile == null || zzipFile.length() < 6) {
-            return 0;
-        }
-        // check file ending with ".zzip"
-        if (!zzipFile.substring(zzipFile.length() - 5, zzipFile.length()).equals(".zzip")) {
-            System.err.println("Error: not .zzip file");
-            return 0;
-        }
-
-        try {
-            // start encoding
-            BufferedInputStream ins = 
-                new BufferedInputStream(new FileInputStream(zzipFile));
-
-            // read original file size
-            byte[] barray = new byte[8];
-            ins.read(barray, 0, 8);
-            fileSize = ByteBuffer.wrap(barray).getLong();
-            // read number of treeNodes
-            barray = new byte[4];
-            ins.read(barray, 0, 4);
-            nodeNum = ByteBuffer.wrap(barray).getInt();
-            // start reading treeNodes and create the huffman tree
-            PriorityQueue<TreeNode> heap = new PriorityQueue<TreeNode>();
-            for (int i = 0; i < nodeNum; i++) {
-                byte b = (byte)ins.read();
-                ins.read(barray, 0, 4);
-                int cnt = ByteBuffer.wrap(barray).getInt();
-                TreeNode node = new TreeNode(b, cnt);
-                heap.add(node);
-            }
-            nodeNum = heap.size();
-            this.root = buildTree(heap); // build tree
-
-            // start decoding
-            String originFileName = zzipFile.substring(0, zzipFile.length() - 5);
-            BufferedOutputStream outs = 
-                new BufferedOutputStream(new FileOutputStream(originFileName));
-
-            int crtSize = 0, index = 0;
-            byte crtByte = (byte)ins.read();
-            TreeNode tracer = root;
-            while (crtSize < fileSize) {
-                // trace from root to decode next byte
-                while (tracer.left != null || tracer.right.right != null) {
-                    if ((crtByte & (0x1<<index)) == 0) {
-                        tracer = tracer.left;
-                    }
-                    else {
-                        tracer = tracer.right;
-                    }
-                    index++;
-                    if (index == 8) {
-                        crtByte = (byte)ins.read();
-                        index = 0;
-                    }
-                }
-                // write a original byte
-                outs.write(tracer.b);
-                tracer = root;
-                crtSize++;
-            }
-
-            ins.close();
-            outs.close();
-        }
-        catch (IOException e) {
-           e.printStackTrace();
-        }
-        return fileSize;
-    }
-
-    /**
-     * build huffman tree
-     * @param heap a min heap containing all nodes
-     * @return tree root
-     */
-    private TreeNode buildTree(PriorityQueue<TreeNode> heap) {
-        if (nodeNum == 1) { // edge case
-            TreeNode node1 = heap.poll();
-            TreeNode node2 = new TreeNode((byte)0, 0);
-            TreeNode newNode = new TreeNode((byte)0, node1.count + node2.count);
-            newNode.left = node1;
-            newNode.right = node2;
-            heap.add(newNode);
-        }
-        for (int i = 0; i < nodeNum - 1; i++) {
-            TreeNode node1 = heap.poll();
-            TreeNode node2 = heap.poll();
-            TreeNode newNode = new TreeNode((byte)0, node1.count + node2.count);
-            newNode.left = node1;
-            newNode.right = node2;
-            heap.add(newNode);
-        }
-        return heap.poll(); // final node is root
-    }
-
 
     public static void main(String[] args) {
-        HuffmanTree huftree = new HuffmanTree("testFile");
+        HuffmanTree huftree = new HuffmanTree("testFile.java");
         huftree.createHuffmanTree();
         huftree.compressFile();
         return;
