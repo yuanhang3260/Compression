@@ -1,4 +1,4 @@
-package Huffman;
+package Compression;
 
 import java.io.Serializable;
 import java.util.PriorityQueue;
@@ -12,12 +12,13 @@ import java.io.FileOutputStream;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.nio.ByteBuffer;
+import Compression.AbstractCompressor;
 
 /**
  * HuffmanTree
  * @author Hang Yuan
  */
-public class HuffmanTree {
+public class HuffmanTree extends AbstractCompressor {
 
     /*
      * Huffman Tree Node
@@ -41,6 +42,7 @@ public class HuffmanTree {
     }
 
     String fileName = null;
+    String zipFileName = null;
     TreeNode root = null;
     int nodeNum = 0;
     long fileSize = 0; // of byte
@@ -50,34 +52,18 @@ public class HuffmanTree {
      * constructor
      * @param fileName file to be compressed
      */
-    public HuffmanTree(String fileName) {
-        this.fileName = fileName;
-    }
-
-    /**
-     * create Huffman Tree
-     */
-    public void createHuffmanTree() {
-        // read file and count number of all bytes
-        File file = new File(fileName);
-        fileSize = file.length();
-        try {
-            BufferedInputStream ins = 
-                new BufferedInputStream(new FileInputStream(fileName));
-
-            // build Huffman tree
-            // count number of each byte
-            int[] counts = new int[256];
-            for (int i = 0; i < fileSize; i++) {
-                byte b = (byte)ins.read();
-                counts[(int)(b&0x0FF)]++;
-            }
-            this.root = buildTree(counts);
-            
-            ins.close();
+    public HuffmanTree(String pathName) {
+        
+        if (pathName.length() >= 5 &&
+            pathName.substring(pathName.length() - 4, pathName.length()).equals(".huf")) 
+        {
+            setDecompressMode();
+            zipFileName = pathName;
+            fileName = pathName.substring(0, pathName.length() - 4);
         }
-        catch (IOException e) {
-           e.printStackTrace();
+        else {
+            fileName = pathName;
+            zipFileName = fileName + ".huf";
         }
     }
 
@@ -87,11 +73,21 @@ public class HuffmanTree {
      * |   8 bytes     |    4bytes    |  {b, cnt}   | ..... |
      * @return decoded bit size
      */
-    public long compressFile() {
+    @Override
+    public long compress() {
+        if (mode() != AbstractCompressor.Mode.Compress) {
+            System.err.println("Error: Not in Compress mode");
+            return 0;
+        }
+
+        // create huffman tree
+        createHuffmanTree();
+
+        // begin compressing
         File file = new File(fileName);
         try {
             BufferedOutputStream outs = 
-                new BufferedOutputStream(new FileOutputStream(fileName + ".zzip"));
+                new BufferedOutputStream(new FileOutputStream(zipFileName));
 
             // write original file size
             ByteBuffer bBuf = ByteBuffer.allocate(8);
@@ -103,14 +99,14 @@ public class HuffmanTree {
             bBuf.putInt(nodeNum);
             outs.write(bBuf.array(), 0, 4);
             
-            // traverse the huffman tree and write treeNodes to .zzip file
+            // traverse the huffman tree and write treeNodes to .huf file
             HashMap<Byte, TreeNode> map = new HashMap<Byte, TreeNode>();
             Stack<TreeNode> stack = new Stack<TreeNode>();
             stack.push(root);
             root.encode = new ArrayList<Byte>();
             while (!stack.isEmpty()) {
                 TreeNode node = stack.pop();
-                // write leave node to .zzip file
+                // write leave node to .huf file
                 if (node.left == null && node.right == null) {
                     bBuf = ByteBuffer.allocate(5);
                     bBuf.put(node.b);
@@ -148,7 +144,7 @@ public class HuffmanTree {
                     crt = (byte)(crt|(c<<index));
                     index++;
                     if (index == 8) {
-                        // write this byte to .zzip file and reset byte buf
+                        // write this byte to .huf file and reset byte buf
                         outs.write(crt);
                         crt = 0;
                         index = 0;
@@ -166,6 +162,9 @@ public class HuffmanTree {
         catch (IOException e) {
            e.printStackTrace();
         }
+
+        // go to decompress mode
+        setDecompressMode();
         return compressedSize;
     }
 
@@ -174,20 +173,18 @@ public class HuffmanTree {
      * @param zzipFile zzip file name
      * @return decompressed file size
      */
-    public long decompress(String zzipFile) {
-        if (zzipFile == null || zzipFile.length() < 6) {
-            return 0;
-        }
-        // check file ending with ".zzip"
-        if (!zzipFile.substring(zzipFile.length() - 5, zzipFile.length()).equals(".zzip")) {
-            System.err.println("Error: not .zzip file");
+    @Override
+    public long decompress() {
+        // check file ending with ".huf"
+        if (mode() != AbstractCompressor.Mode.Decompress) {
+            System.err.println("Error: Not in Decompress mode");
             return 0;
         }
 
         try {
             // start decoding
             BufferedInputStream ins = 
-                new BufferedInputStream(new FileInputStream(zzipFile));
+                new BufferedInputStream(new FileInputStream(zipFileName));
 
             // read original file size
             byte[] barray = new byte[8];
@@ -210,9 +207,8 @@ public class HuffmanTree {
             this.root = buildTree(counts); // build tree
             
             // start decoding
-            String originFileName = zzipFile.substring(0, zzipFile.length() - 5);
             BufferedOutputStream outs = 
-                new BufferedOutputStream(new FileOutputStream(originFileName + ".out"));
+                new BufferedOutputStream(new FileOutputStream(fileName + ".out"));
 
             int crtSize = 0, index = 0;
             byte crtByte = (byte)ins.read();
@@ -247,12 +243,13 @@ public class HuffmanTree {
         return fileSize;
     }
 
+
     /**
      * build huffman tree
      * @param counts count array of all bytes
      * @return tree root
      */
-    private TreeNode buildTree(int[] counts) {
+    public TreeNode buildTree(int[] counts) {
         // create tree nodes and put them in a min heap
         PriorityQueue<TreeNode> heap = new PriorityQueue<TreeNode>();
         for (int i = 0; i < 256; i++) {
@@ -283,14 +280,31 @@ public class HuffmanTree {
     }
 
 
-    public static void main(String[] args) {
-        HuffmanTree huftree = new HuffmanTree("testFile");
-        huftree.createHuffmanTree();
-        huftree.compressFile();
+    /**
+     * create Huffman Tree
+     */
+    private void createHuffmanTree() {
+        // read file and count number of all bytes
+        File file = new File(fileName);
+        fileSize = file.length();
+        try {
+            BufferedInputStream ins = 
+                new BufferedInputStream(new FileInputStream(fileName));
 
-        huftree = new HuffmanTree("testFile");
-        huftree.decompress("testFile.zzip");
-
-        return;
+            // build Huffman tree
+            // count number of each byte
+            int[] counts = new int[256];
+            for (int i = 0; i < fileSize; i++) {
+                byte b = (byte)ins.read();
+                counts[(int)(b&0x0FF)]++;
+            }
+            this.root = buildTree(counts);
+            
+            ins.close();
+        }
+        catch (IOException e) {
+           e.printStackTrace();
+        }
     }
+
 }
