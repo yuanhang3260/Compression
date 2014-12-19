@@ -45,8 +45,8 @@ public class HuffmanTree extends AbstractCompressor {
     String zipFileName = null;
     TreeNode root = null;
     int nodeNum = 0;
-    long fileSize = 0; // of byte
-    long compressedSize = 0; // of bit
+    long fileSize = 0;
+    long compressedSize = 0;
 
     /**
      * constructor
@@ -84,6 +84,7 @@ public class HuffmanTree extends AbstractCompressor {
         createHuffmanTree();
 
         // begin compressing
+        System.out.println("Start Compressing ...");
         File file = new File(fileName);
         try {
             BufferedOutputStream outs = 
@@ -99,6 +100,8 @@ public class HuffmanTree extends AbstractCompressor {
             bBuf.putInt(nodeNum);
             outs.write(bBuf.array(), 0, 4);
             
+            compressedSize = 12;
+
             // traverse the huffman tree and write treeNodes to .huf file
             HashMap<Byte, TreeNode> map = new HashMap<Byte, TreeNode>();
             Stack<TreeNode> stack = new Stack<TreeNode>();
@@ -114,19 +117,20 @@ public class HuffmanTree extends AbstractCompressor {
                     outs.write(bBuf.array(), 0, 5);
                     // add this leave to HashMap
                     map.put(node.b, node);
+                    compressedSize += 5;
                 }
                 // push left and right child
-                if (node.left != null) {
-                    node.left.encode = new ArrayList<Byte>();
-                    node.left.encode.addAll(node.encode);
-                    node.left.encode.add((byte)0);
-                    stack.push(node.left);
-                }
                 if (node.right != null) {
                     node.right.encode = new ArrayList<Byte>();
                     node.right.encode.addAll(node.encode);
                     node.right.encode.add((byte)1);
                     stack.push(node.right);
+                }
+                if (node.left != null) {
+                    node.left.encode = new ArrayList<Byte>();
+                    node.left.encode.addAll(node.encode);
+                    node.left.encode.add((byte)0);
+                    stack.push(node.left);
                 }
             }
 
@@ -148,12 +152,13 @@ public class HuffmanTree extends AbstractCompressor {
                         outs.write(crt);
                         crt = 0;
                         index = 0;
+                        compressedSize++;
                     }
-                    compressedSize++;
                 }
             }
             if (index < 8) {
                 outs.write(crt);
+                compressedSize++;
             }
 
             ins.close();
@@ -165,12 +170,14 @@ public class HuffmanTree extends AbstractCompressor {
 
         // go to decompress mode
         setDecompressMode();
+        setCompressRate(((double)compressedSize) / fileSize);
+        System.out.println("Done: Compression Rate = " + 
+                           String.format("%.2f", getCompressRate()*100) + "%\n");
         return compressedSize;
     }
 
     /**
      * decompress File
-     * @param zzipFile zzip file name
      * @return decompressed file size
      */
     @Override
@@ -190,6 +197,9 @@ public class HuffmanTree extends AbstractCompressor {
             byte[] barray = new byte[8];
             ins.read(barray, 0, 8);
             fileSize = ByteBuffer.wrap(barray).getLong();
+            File file = new File(zipFileName);
+            setCompressRate(((double)file.length()) / fileSize);
+            System.out.println("Start Decompressing ...");
             
             // read number of treeNodes
             barray = new byte[4];
