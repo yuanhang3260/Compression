@@ -189,7 +189,7 @@ public class HuffmanTree extends AbstractCompressor {
         }
 
         try {
-            // start decoding
+            System.out.println("Start Decompressing ...");
             BufferedInputStream ins = 
                 new BufferedInputStream(new FileInputStream(zipFileName));
 
@@ -199,14 +199,13 @@ public class HuffmanTree extends AbstractCompressor {
             fileSize = ByteBuffer.wrap(barray).getLong();
             File file = new File(zipFileName);
             setCompressRate(((double)file.length()) / fileSize);
-            System.out.println("Start Decompressing ...");
             
             // read number of treeNodes
             barray = new byte[4];
             ins.read(barray, 0, 4);
             nodeNum = ByteBuffer.wrap(barray).getInt();
             
-            // start reading treeNodes and create the huffman tree
+            // read tree leaves and recover the huffman tree
             int[] counts = new int[256];
             for (int i = 0; i < nodeNum; i++) {
                 byte b = (byte)ins.read();
