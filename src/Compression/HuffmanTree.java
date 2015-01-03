@@ -41,30 +41,15 @@ public class HuffmanTree extends AbstractCompressor {
         }
     }
 
-    String fileName = null;
-    String zipFileName = null;
     TreeNode root = null;
     int nodeNum = 0;
-    long fileSize = 0;
-    long compressedSize = 0;
 
     /**
      * constructor
      * @param fileName file to be compressed
      */
     public HuffmanTree(String pathName) {
-        
-        if (pathName.length() >= 5 &&
-            pathName.substring(pathName.length() - 4, pathName.length()).equals(".huf")) 
-        {
-            setDecompressMode();
-            zipFileName = pathName;
-            fileName = pathName.substring(0, pathName.length() - 4);
-        }
-        else {
-            fileName = pathName;
-            zipFileName = fileName + ".huf";
-        }
+        super(pathName, "huf");
     }
 
     /**
@@ -79,13 +64,12 @@ public class HuffmanTree extends AbstractCompressor {
             System.err.println("Error: Not in Compress mode");
             return 0;
         }
-
+        
         // create huffman tree
         createHuffmanTree();
 
         // begin compressing
         System.out.println("Start Compressing ...");
-        File file = new File(fileName);
         try {
             BufferedOutputStream outs = 
                 new BufferedOutputStream(new FileOutputStream(zipFileName));
@@ -139,24 +123,24 @@ public class HuffmanTree extends AbstractCompressor {
                 new BufferedInputStream(new FileInputStream(fileName));
 
             byte crt = 0; // byte buf
-            int index = 0;
+            int byteIndex = 0;
             for (int i = 0; i < fileSize; i++) {
                 byte b = (byte)ins.read();
                 TreeNode node = map.get(b);
                 for (byte c: node.encode) {
                     //System.out.println(c);
-                    crt = (byte)(crt|(c<<index));
-                    index++;
-                    if (index == 8) {
+                    crt = (byte)(crt|(c<<byteIndex));
+                    byteIndex++;
+                    if (byteIndex == 8) {
                         // write this byte to .huf file and reset byte buf
                         outs.write(crt);
                         crt = 0;
-                        index = 0;
+                        byteIndex = 0;
                         compressedSize++;
                     }
                 }
             }
-            if (index < 8) {
+            if (byteIndex < 8) {
                 outs.write(crt);
                 compressedSize++;
             }
@@ -205,7 +189,7 @@ public class HuffmanTree extends AbstractCompressor {
             ins.read(barray, 0, 4);
             nodeNum = ByteBuffer.wrap(barray).getInt();
             
-            // read tree leaves and recover the huffman tree
+            // read leave nodes and recover the huffman tree
             int[] counts = new int[256];
             for (int i = 0; i < nodeNum; i++) {
                 byte b = (byte)ins.read();
@@ -295,9 +279,6 @@ public class HuffmanTree extends AbstractCompressor {
      * create Huffman Tree
      */
     private void createHuffmanTree() {
-        // read file and count number of all bytes
-        File file = new File(fileName);
-        fileSize = file.length();
         try {
             BufferedInputStream ins = 
                 new BufferedInputStream(new FileInputStream(fileName));

@@ -5,10 +5,10 @@ import Compression.Compressors;
 
 public class CompressTest {
     public static void main(String[] args) {
-        CompressService huftreeCompressor = Compressors.newHuffmanTree("testFile");
+        CompressService arithCompressor = Compressors.newArithCoder("testFile");
 
-        huftreeCompressor.compress();
-        huftreeCompressor.decompress();
+        arithCompressor.compress();
+        arithCompressor.decompress();
         return;
     }
 }
