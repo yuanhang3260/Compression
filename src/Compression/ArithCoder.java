@@ -201,6 +201,7 @@ public class ArithCoder extends AbstractCompressor {
             byte crtByte = (byte)ins.read();
             System.out.println("read byte: " + crtByte);
             int crtSize = 0, readSize = 3;
+            ArrayList<Integer> bitsToWrite = new ArrayList<Integer>();
             while (crtSize < fileSize && readSize <= compressedSize) {
                 // try{
                 //     Thread.sleep(500);
@@ -211,19 +212,29 @@ public class ArithCoder extends AbstractCompressor {
                 int rangeLowIndex = searchRange(distri, acc);
                 double rangeLow = distri[rangeLowIndex];
                 double rangeHigh = rangeLowIndex == 255? 1 : distri[rangeLowIndex + 1];
-                //System.out.println("acc = " + acc + ", [" + rangeLow + " " + rangeHigh + "]");
+                System.out.println("rangeLowIndex = " + rangeLowIndex + ", [" + rangeLow + " " + rangeHigh + "]");
                 if ((acc + 1.0 / exp) <= rangeHigh) {
                     // write a decoded byte
                     outs.write((byte)rangeLowIndex);
+                    crtSize++;
                     System.out.println("produce byte: " + (byte)rangeLowIndex);
-                    exp = 1;
-                    acc = (acc - rangeLow) / (rangeHigh - rangeLow);
+                    int bitsWritten = checkBitsToWrite(distri, rangeLowIndex, bitsToWrite);
+                    rangeLow = rangeLow * Math.pow(2, bitsWritten);
+                    rangeLow = rangeLow - (int)rangeLow; // remove non-faction part
+                    rangeHigh = rangeHigh * Math.pow(2, bitsWritten);
+                    rangeHigh = rangeHigh - (int)rangeHigh;
+                    acc = acc * Math.pow(2, bitsWritten);
+                    acc = acc - (int)acc;
+                    exp /= Math.pow(2, bitsWritten);
+                    bitsToWrite.clear();
                     System.out.println("normalized acc = " + acc);
                     // update cnts and distribution arrays
                     cnts[rangeLowIndex]++;
                     total++;
+                    distri[0] = rangeLow;
                     for (int j = 1; j < 256; j++) {
-                        distri[j] = distri[j-1] + (1.0 * cnts[j-1] / total);
+                        distri[j] = distri[j-1] 
+                                  + (1.0 * cnts[j-1] / total) * (rangeHigh - rangeLow);
                     }
                 }
                 else {
@@ -269,7 +280,8 @@ public class ArithCoder extends AbstractCompressor {
         // }
 
         // compare with higer bound of this interval
-        double rangeLow = distri[index], rangeHigh = distri[index+1];
+        double rangeLow = distri[index];
+        double rangeHigh = index == 255? 1 : distri[index + 1];
         //System.out.println(rangeLow + " | " + rangeHigh);
         int num1 = 0;
         while (true) {
