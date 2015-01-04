@@ -210,7 +210,7 @@ public class ArithCoder extends AbstractCompressor {
                     // write a decoded byte
                     outs.write((byte)rangeLowIndex);
                     crtSize++;
-                    //System.out.println("produce byte: " + (byte)rangeLowIndex);
+                    System.out.println("\nproduce byte: " + (byte)rangeLowIndex);
                     int bitsWritten = checkBitsToWrite(distri, rangeLowIndex, bitsToWrite);
                     rangeLow = rangeLow * Math.pow(2, bitsWritten);
                     rangeLow = rangeLow - (int)rangeLow; // remove non-faction part
@@ -234,7 +234,7 @@ public class ArithCoder extends AbstractCompressor {
                     int bit = (crtByte>>byteIndex) & 0x1;
                     exp *= 2;
                     acc += (1.0*bit / exp);
-                    //System.out.println("bit = " + bit + " acc = " + acc);
+                    System.out.printf("%d ", bit);
                     
                     byteIndex++;
                     if (byteIndex == 8) {
@@ -267,10 +267,6 @@ public class ArithCoder extends AbstractCompressor {
     private int checkBitsToWrite(double[] distri, int index,
                                  ArrayList<Integer> bitsToWrite) 
     {
-        if (rangeLow == rangeHigh) {
-            System.err.println("Error: " + rangeLow);
-        }
-
         // compare with higer bound of this interval
         double rangeLow = distri[index];
         double rangeHigh = index == 255? 1 : distri[index + 1];
