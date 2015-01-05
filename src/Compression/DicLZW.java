@@ -1,10 +1,12 @@
 package Compression;
 
 import java.io.Serializable;
-import java.lang.Thread;
+import java.util.Map;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.lang.StringBuilder;
 import java.io.IOException;
 import java.io.File;
 import java.io.FileInputStream;
@@ -15,24 +17,38 @@ import java.nio.ByteBuffer;
 import Compression.AbstractCompressor;
 
 /**
- * Arithmatic Coding
+ * LWZ dictionary compressing
  * @author Hang Yuan
  */
-public class DicLWZ extends AbstractCompressor {
+public class DicLZW extends AbstractCompressor {
+
+    /**
+     * dictionary record
+     */
+    class DicRecord {
+        int encode;
+        int len;
+        String word = null;
+        public DicRecord(int encode, int len, String word) {
+            this.encode = encode;
+            this.len = len;
+            this.word = word;
+        }
+    }
 
     /**
      * constructor
      * @param fileName file to be compressed
      */
-    public DicLWZ(String pathName) {
-        super(pathName, "lwz");
+    public DicLZW(String pathName) {
+        super(pathName, "lzw");
     }
 
     /**
-     * compress file
-     * | original size | data  |
-     * |   8 bytes     | ..... |
-     * @return decoded bit size
+     * compress a file
+     * | original size | number of records |     dictionary records     | encoded bytes |
+     * |   8 bytes     |      8 bytes      | {encode, len, bytes[]} ... |    ... ...    |
+     * @return encoded size
      */
     @Override
     public long compress() {
@@ -45,99 +61,79 @@ public class DicLWZ extends AbstractCompressor {
         System.out.println("Start Compressing ...");
         File file = new File(fileName);
         try {
-            BufferedOutputStream outs = 
-                new BufferedOutputStream(new FileOutputStream(zipFileName));
-
-            // write original file size
-            ByteBuffer bBuf = ByteBuffer.allocate(8);
-            bBuf.putLong(fileSize);
-            outs.write(bBuf.array(), 0, 8);
-            
             // start encoding
             BufferedInputStream ins = 
                 new BufferedInputStream(new FileInputStream(fileName));
 
-            // byte count and prob distribution
-            int[] cnts = new int[256];
-            Arrays.fill(cnts, 1);
-            int total = 256;
-
-            double[] distri = new double[256];
-            for (int i = 1; i < 256; i++) {
-                distri[i] = distri[i-1] + 1.0 / 256;
-            }
-
-            byte crt = 0; // byte buf
-            int byteIndex = 0; // bit index in byte buf
-            double rangeLow = 0, rangeHigh = 1;
-            ArrayList<Integer> bitsToWrite = new ArrayList<Integer>();
+            // read the orginal file and build the dictionary
+            HashMap<String, DicRecord> map = new HashMap<String, DicRecord>();
+            ArrayList<Byte> output = new ArrayList<Byte>();
+            StringBuilder word = new StringBuilder();
+            int nextNo = 0;
+            byte nextByte = (byte)ins.read();
             for (int i = 0; i < fileSize; i++) {
-                byte b = (byte)ins.read();
-                int index = (int)(b&0x0FF);
-                
-                // try to write encoded bits if possible
-                int bitsWritten = checkBitsToWrite(distri, index, bitsToWrite);
-                //System.out.printf("Got %d bits: [", bitsWritten);
-                // for (Integer a: bitsToWrite) {
-                //     System.out.printf("%d ", a);
-                // }
-                // System.out.println("\b]");
-                //System.out.println(rangeLow + " " + rangeHigh);
-                for (Integer a: bitsToWrite) {
-                    crt = (byte)(crt|(a<<byteIndex));
-                    byteIndex++;
-                    if (byteIndex == 8) {
-                        // write this byte to .art file and reset byte buf
-                        outs.write(crt);
-                        //System.out.println("dumping byte: " + crt);
-                        crt = 0;
-                        byteIndex = 0;
-                        compressedSize++;
+                byte crtByte = nextByte;
+                // add this byte to dictionary
+                String crtByteAsString = String.valueOf(crtByte);
+                if (!map.containsKey(crtByteAsString)) {
+                    map.put(crtByteAsString, new DicRecord(++nextNo, 1, crtByteAsString));
+                }
+                // process successive bytes
+                if (i < fileSize - 1) {
+                    nextByte = (byte)ins.read();
+                    String oldWord = word.toString();
+                    word.append((char)nextByte);
+                    if (!map.containsKey(word.toString())) {
+                        // write word to output
+                        for (Byte b: oldWord.getBytes()) {
+                            output.add(b);
+                        }
+                        //output.addAll(Arrays.asList(oldWord.getBytes()));
+
+                        // add current word as a new record into dictionary
+                        map.put(word.toString(), 
+                                new DicRecord(++nextNo, word.length(), word.toString()));
+
+                        word.setLength(0);
+                        word.append(nextByte);
                     }
                 }
-                bitsToWrite.clear();
-
-                // update range low and high
-                rangeLow = distri[index];
-                rangeHigh = index == 255? 1 : distri[index + 1];
-                rangeLow = rangeLow * Math.pow(2, bitsWritten);
-                rangeLow = rangeLow - (int)rangeLow; // remove non-faction part
-                rangeHigh = rangeHigh * Math.pow(2, bitsWritten);
-                rangeHigh = rangeHigh - (int)rangeHigh;
-
-                // update distribution and count arrays
-                cnts[index]++;
-                total++;
-                distri[0] = rangeLow;
-                for (int j = 1; j < 256; j++) {
-                    distri[j] = distri[j-1] 
-                                + (1.0 * cnts[j-1] / total) * (rangeHigh - rangeLow);
-                }
-            }
-            // write trailing bits
-            if (rangeLow != rangeHigh) {
-                double middle = (rangeLow + rangeHigh) / 2;
-                while (middle > 0) {
-                    middle *= 2;
-                    int a = (int)middle;
-                    middle -= a;
-                    crt = (byte)(crt|(a<<byteIndex));
-                    byteIndex++;
-                    if (byteIndex == 8) {
-                        // write this byte to .art file and reset byte buf
-                        outs.write(crt);
-                        //System.out.println("dumping byte: " + crt);
-                        crt = 0;
-                        byteIndex = 0;
-                        compressedSize++;
+                else {
+                    // reach EOF
+                    for (Byte b: word.toString().getBytes()) {
+                        output.add(b);
                     }
                 }
             }
-            // write the last imcomplete byte
-            if (byteIndex < 8) {
-                outs.write(crt);
-                //System.out.println("dumping last byte: " + crt);
-                compressedSize++;
+
+            // begin writing zip file
+            BufferedOutputStream outs = 
+                new BufferedOutputStream(new FileOutputStream(zipFileName));
+
+            // write meta data
+            ByteBuffer bBuf = ByteBuffer.allocate(16);
+            bBuf.putLong(fileSize); // orignal file size
+            bBuf.putInt(8, output.size()); // encoded byte size
+            bBuf.putInt(12, map.size()); // number of dict records
+            outs.write(bBuf.array(), 0, 16);
+
+            // write dict records
+            Iterator iter = map.entrySet().iterator();
+            while (iter.hasNext()) {
+                Map.Entry entry = (Map.Entry)iter.next();
+                DicRecord record = (DicRecord)entry.getValue();
+                bBuf = ByteBuffer.allocate(8);
+                bBuf.putInt(record.encode);
+                bBuf.putInt(4, record.len);
+                outs.write(bBuf.array(), 0, 8);
+                for (int i = 0; i < record.len; i++) {
+                    outs.write(record.word.getBytes(), 0, record.len);
+                }
+            }
+
+            // write encoded bytes
+            for (Byte b: output) {
+                outs.write(b);
             }
 
             ins.close();
@@ -157,7 +153,7 @@ public class DicLWZ extends AbstractCompressor {
 
     /**
      * decompress file
-     * @return decompressed file size
+     * @return original file size
      */
     @Override
     public long decompress() {
