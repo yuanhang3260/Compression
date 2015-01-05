@@ -5,10 +5,10 @@ import Compression.Compressors;
 
 public class CompressTest {
     public static void main(String[] args) {
-        CompressService arithCompressor = Compressors.newArithCoder("testFile");
+        CompressService compressor = Compressors.newDictLZW("testFile");
 
-        arithCompressor.compress();
-        arithCompressor.decompress();
+        compressor.compress();
+        compressor.decompress();
         return;
     }
 }

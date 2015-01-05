@@ -20,16 +20,16 @@ import Compression.AbstractCompressor;
  * LWZ dictionary compressing
  * @author Hang Yuan
  */
-public class DicLZW extends AbstractCompressor {
+public class DictLZW extends AbstractCompressor {
 
     /**
      * dictionary record
      */
-    class DicRecord {
+    class DictRecord {
         int encode;
         int len;
         String word = null;
-        public DicRecord(int encode, int len, String word) {
+        public DictRecord(int encode, int len, String word) {
             this.encode = encode;
             this.len = len;
             this.word = word;
@@ -40,14 +40,14 @@ public class DicLZW extends AbstractCompressor {
      * constructor
      * @param fileName file to be compressed
      */
-    public DicLZW(String pathName) {
+    public DictLZW(String pathName) {
         super(pathName, "lzw");
     }
 
     /**
      * compress a file
-     * | original size | number of records |     dictionary records     | encoded bytes |
-     * |   8 bytes     |      8 bytes      | {encode, len, bytes[]} ... |    ... ...    |
+     * | original size | encoded bytes |
+     * |   8 bytes     |    ... ...    |
      * @return encoded size
      */
     @Override
@@ -66,42 +66,45 @@ public class DicLZW extends AbstractCompressor {
                 new BufferedInputStream(new FileInputStream(fileName));
 
             // read the orginal file and build the dictionary
-            HashMap<String, DicRecord> map = new HashMap<String, DicRecord>();
-            ArrayList<Byte> output = new ArrayList<Byte>();
+            HashMap<String, DictRecord> map = new HashMap<String, DictRecord>();
+            ArrayList<Integer> output = new ArrayList<Integer>();
             StringBuilder word = new StringBuilder();
-            int nextNo = 0;
+            int nextNo = 255;
             byte nextByte = (byte)ins.read();
+            word.append((char)nextByte);
+            //System.out.println("read byte: " + (char)nextByte);
             for (int i = 0; i < fileSize; i++) {
                 byte crtByte = nextByte;
-                // add this byte to dictionary
-                String crtByteAsString = String.valueOf(crtByte);
-                if (!map.containsKey(crtByteAsString)) {
-                    map.put(crtByteAsString, new DicRecord(++nextNo, 1, crtByteAsString));
-                }
                 // process successive bytes
                 if (i < fileSize - 1) {
                     nextByte = (byte)ins.read();
+                    //System.out.println("read byte: " + (char)nextByte);
                     String oldWord = word.toString();
                     word.append((char)nextByte);
                     if (!map.containsKey(word.toString())) {
                         // write word to output
-                        for (Byte b: oldWord.getBytes()) {
-                            output.add(b);
+                        if (oldWord.length() == 1) {
+                            output.add((int)crtByte);
                         }
-                        //output.addAll(Arrays.asList(oldWord.getBytes()));
+                        else {
+                            output.add(map.get(oldWord).encode);
+                        }
 
                         // add current word as a new record into dictionary
                         map.put(word.toString(), 
-                                new DicRecord(++nextNo, word.length(), word.toString()));
+                                new DictRecord(++nextNo, word.length(), word.toString()));
 
                         word.setLength(0);
-                        word.append(nextByte);
+                        word.append((char)nextByte);
                     }
                 }
                 else {
                     // reach EOF
-                    for (Byte b: word.toString().getBytes()) {
-                        output.add(b);
+                    if (word.length() == 1) {
+                        output.add((int)crtByte);
+                    }
+                    else {
+                        output.add(map.get(word.toString()).encode);
                     }
                 }
             }
@@ -111,29 +114,18 @@ public class DicLZW extends AbstractCompressor {
                 new BufferedOutputStream(new FileOutputStream(zipFileName));
 
             // write meta data
-            ByteBuffer bBuf = ByteBuffer.allocate(16);
+            ByteBuffer bBuf = ByteBuffer.allocate(8);
             bBuf.putLong(fileSize); // orignal file size
-            bBuf.putInt(8, output.size()); // encoded byte size
-            bBuf.putInt(12, map.size()); // number of dict records
-            outs.write(bBuf.array(), 0, 16);
-
-            // write dict records
-            Iterator iter = map.entrySet().iterator();
-            while (iter.hasNext()) {
-                Map.Entry entry = (Map.Entry)iter.next();
-                DicRecord record = (DicRecord)entry.getValue();
-                bBuf = ByteBuffer.allocate(8);
-                bBuf.putInt(record.encode);
-                bBuf.putInt(4, record.len);
-                outs.write(bBuf.array(), 0, 8);
-                for (int i = 0; i < record.len; i++) {
-                    outs.write(record.word.getBytes(), 0, record.len);
-                }
-            }
+            outs.write(bBuf.array(), 0, 8);
 
             // write encoded bytes
-            for (Byte b: output) {
-                outs.write(b);
+            compressedSize = output.size();
+            System.out.println("Compressed Size = " + compressedSize);
+            for (Integer code: output) {
+                //System.out.println("dumping: " + code);
+                bBuf = ByteBuffer.allocate(4);
+                bBuf.putInt(code); // orignal file size
+                outs.write(bBuf.array(), 0, 4);
             }
 
             ins.close();
@@ -181,67 +173,42 @@ public class DicLZW extends AbstractCompressor {
                 new BufferedOutputStream(new FileOutputStream(fileName + ".out"));
 
             // initialize byte count and prob distribution
-            int[] cnts = new int[256];
-            Arrays.fill(cnts, 1);
-            int total = 256;
-
-            double[] distri = new double[256];
-            for (int i = 1; i < 256; i++) {
-                distri[i] = distri[i-1] + 1.0 / 256;
-            }
-
-            // start decoding
-            int byteIndex = 0;
-            int exp = 1;
-            double acc = 0;
-            byte crtByte = (byte)ins.read();
-            int crtSize = 0, readSize = 3;
-            ArrayList<Integer> bitsToWrite = new ArrayList<Integer>();
-            while (crtSize < fileSize && readSize <= compressedSize) {
-                int rangeLowIndex = searchRange(distri, acc);
-                double rangeLow = distri[rangeLowIndex];
-                double rangeHigh = rangeLowIndex == 255? 1 : distri[rangeLowIndex + 1];
-                //System.out.println("rangeLowIndex = " + rangeLowIndex + ", [" + rangeLow + " " + rangeHigh + "]");
-                if ((acc + 1.0 / exp) <= rangeHigh) {
-                    // write a decoded byte
-                    outs.write((byte)rangeLowIndex);
+            int crtSize = 0;
+            ArrayList<DictRecord> table = new ArrayList<DictRecord>();
+            StringBuilder crtWord = new StringBuilder();
+            byte[] lastEntry = null;
+            while (crtSize < fileSize) {
+                barray = new byte[4];
+                ins.read(barray, 0, 4);
+                int encode = ByteBuffer.wrap(barray).getInt();
+                //System.out.println("read: " + encode);
+                byte[] entry = null;
+                if ((int)encode < 256) {
+                    outs.write((byte)encode);
+                    entry = new byte[1];
+                    entry[0] = (byte)encode;
                     crtSize++;
-                    System.out.println("\nproduce byte: " + (byte)rangeLowIndex);
-                    int bitsWritten = checkBitsToWrite(distri, rangeLowIndex, bitsToWrite);
-                    rangeLow = rangeLow * Math.pow(2, bitsWritten);
-                    rangeLow = rangeLow - (int)rangeLow; // remove non-faction part
-                    rangeHigh = rangeHigh * Math.pow(2, bitsWritten);
-                    rangeHigh = rangeHigh - (int)rangeHigh;
-                    acc = acc * Math.pow(2, bitsWritten);
-                    acc = acc - (int)acc;
-                    exp /= Math.pow(2, bitsWritten);
-                    bitsToWrite.clear();
-                    //System.out.println("normalized acc = " + acc);
-                    // update cnts and distribution arrays
-                    cnts[rangeLowIndex]++;
-                    total++;
-                    distri[0] = rangeLow;
-                    for (int j = 1; j < 256; j++) {
-                        distri[j] = distri[j-1] 
-                                  + (1.0 * cnts[j-1] / total) * (rangeHigh - rangeLow);
-                    }
                 }
                 else {
-                    int bit = (crtByte>>byteIndex) & 0x1;
-                    exp *= 2;
-                    acc += (1.0*bit / exp);
-                    System.out.printf("%d ", bit);
-                    
-                    byteIndex++;
-                    if (byteIndex == 8) {
-                        crtByte = (byte)ins.read();
-                        //System.out.println("read byte: " + crtByte);
-                        readSize++;
-                        byteIndex = 0;
+                    if (encode - 256 >= table.size()) {
+                        entry = new byte[lastEntry.length + 1];
+                        System.arraycopy(lastEntry, 0, entry, 0, lastEntry.length);
+                        entry[lastEntry.length] = lastEntry[0];
                     }
+                    else {
+                        entry = table.get(encode - 256).word.getBytes();
+                    }
+                    outs.write(entry, 0, entry.length);
+                    crtSize += entry.length;
                 }
-
-            } //end while
+                if (lastEntry != null) {
+                    // add (lastEntry + entry[0]) to dict
+                    String newWord = new String(lastEntry) + (char)entry[0];
+                    //System.out.println("adding " + newWord);
+                    table.add(new DictRecord(table.size(), newWord.length(), newWord));
+                }
+                lastEntry = entry;
+            }
             
 
             ins.close();

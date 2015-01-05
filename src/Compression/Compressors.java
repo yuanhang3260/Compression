@@ -2,6 +2,7 @@ package Compression;
 
 import Compression.HuffmanTree;
 import Compression.ArithCoder;
+import Compression.DictLZW;
 
 /**
  *  Factory class: producing compressors
@@ -21,4 +22,13 @@ public class Compressors {
     public static ArithCoder newArithCoder(String fileName) {
         return new ArithCoder(fileName);
     }
+
+    /**
+     * create a dict LZW compressor
+     */
+    public static DictLZW newDictLZW(String fileName) {
+        return new DictLZW(fileName);
+    }
+
+
 }
