@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Base64;
 import java.lang.StringBuilder;
 import java.io.IOException;
 import java.io.File;
@@ -72,13 +73,13 @@ public class DictLZW extends AbstractCompressor {
             int nextNo = 255;
             byte nextByte = (byte)ins.read();
             word.append((char)nextByte);
-            //System.out.println("read byte: " + (char)nextByte);
+            //System.out.println("read byte: " + (byte)nextByte);
             for (int i = 0; i < fileSize; i++) {
                 byte crtByte = nextByte;
                 // process successive bytes
                 if (i < fileSize - 1) {
                     nextByte = (byte)ins.read();
-                    //System.out.println("read byte: " + (char)nextByte);
+                    //System.out.println("read byte: " + (byte)nextByte);
                     String oldWord = word.toString();
                     word.append((char)nextByte);
                     if (!map.containsKey(word.toString())) {
@@ -93,7 +94,11 @@ public class DictLZW extends AbstractCompressor {
                         // add current word as a new record into dictionary
                         map.put(word.toString(), 
                                 new DictRecord(++nextNo, word.length(), word.toString()));
-
+                        // System.out.printf("adding %d, {", nextNo);
+                        // for (char b: word.toString().toCharArray()) {
+                        //     System.out.printf("%d ", (byte)b);
+                        // }
+                        // System.out.println("\b}");
                         word.setLength(0);
                         word.append((char)nextByte);
                     }
@@ -172,6 +177,10 @@ public class DictLZW extends AbstractCompressor {
             BufferedOutputStream outs = 
                 new BufferedOutputStream(new FileOutputStream(fileName + ".out"));
 
+            // byte encoder and decoder
+            Base64.Encoder encoder = Base64.getEncoder();
+            Base64.Decoder decoder = Base64.getDecoder();
+
             // initialize byte count and prob distribution
             int crtSize = 0;
             ArrayList<DictRecord> table = new ArrayList<DictRecord>();
@@ -181,10 +190,11 @@ public class DictLZW extends AbstractCompressor {
                 barray = new byte[4];
                 ins.read(barray, 0, 4);
                 int encode = ByteBuffer.wrap(barray).getInt();
-                //System.out.println("read: " + encode);
+                //System.out.println("\nread: " + encode);
                 byte[] entry = null;
-                if ((int)encode < 256) {
+                if (encode < 256) {
                     outs.write((byte)encode);
+                    //System.out.println("writing: " + (byte)encode);
                     entry = new byte[1];
                     entry[0] = (byte)encode;
                     crtSize++;
@@ -196,16 +206,26 @@ public class DictLZW extends AbstractCompressor {
                         entry[lastEntry.length] = lastEntry[0];
                     }
                     else {
-                        entry = table.get(encode - 256).word.getBytes();
+                        entry = decoder.decode(table.get(encode - 256).word.getBytes());
                     }
+                    // for (byte b: entry) {
+                    //     System.out.println("writing: " + b);
+                    // }
                     outs.write(entry, 0, entry.length);
                     crtSize += entry.length;
                 }
                 if (lastEntry != null) {
                     // add (lastEntry + entry[0]) to dict
-                    String newWord = new String(lastEntry) + (char)entry[0];
-                    //System.out.println("adding " + newWord);
-                    table.add(new DictRecord(table.size(), newWord.length(), newWord));
+                    byte[] newWord = new byte[lastEntry.length + 1];
+                    System.arraycopy(lastEntry, 0, newWord, 0, lastEntry.length);
+                    newWord[lastEntry.length] = entry[0];
+                    // System.out.printf("adding %d, {", table.size() + 256);
+                    // for (byte b: newWord) {
+                    //     System.out.printf("%d ", (byte)b);
+                    // }
+                    // System.out.println("\b}");
+                    table.add(new DictRecord(table.size(), newWord.length, 
+                                             new String(encoder.encode(newWord))) );
                 }
                 lastEntry = entry;
             }
