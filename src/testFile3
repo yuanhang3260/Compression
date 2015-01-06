@@ -1,1 +1,130 @@
-aaaaa
+
+
+
+
+
+
+Network Working Group                                        D. Robinson
+Request for Comments: 3875                                       K. Coar
+Category: Informational                   The Apache Software Foundation
+                                                            October 2004
+
+
+             The Common Gateway Interface (CGI) Version 1.1
+
+Status of this Memo
+
+   This memo provides information for the Internet community.  It does
+   not specify an Internet standard of any kind.  Distribution of this
+   memo is unlimited.
+
+Copyright Notice
+
+   Copyright (C) The Internet Society (2004).
+
+IESG Note
+
+   This document is not a candidate for any level of Internet Standard.
+   The IETF disclaims any knowledge of the fitness of this document for
+   any purpose, and in particular notes that it has not had IETF review
+   for such things as security, congestion control or inappropriate
+   interaction with deployed protocols.  The RFC Editor has chosen to
+   publish this document at its discretion.  Readers of this document
+   should exercise caution in evaluating its value for implementation
+   and deployment.
+
+Abstract
+
+   The Common Gateway Interface (CGI) is a simple interface for running
+   external programs, software or gateways under an information server
+   in a platform-independent manner.  Currently, the supported
+   information servers are HTTP servers.
+
+   The interface has been in use by the World-Wide Web (WWW) since 1993.
+   This specification defines the 'current practice' parameters of the
+   'CGI/1.1' interface developed and documented at the U.S. National
+   Centre for Supercomputing Applications.  This document also defines
+   the use of the CGI/1.1 interface on UNIX(R) and other, similar
+   systems.
+
+
+
+
+
+
+
+
+
+Robinson & Coar              Informational                      [Page 1]
+
+RFC 3875                    CGI Version 1.1                 October 2004
+
+
+Table of Contents
+
+   1.  Introduction. . . . . . . . . . . . . . . . . . . . . . . . .   4
+       1.1. Purpose  . . . . . . . . . . . . . . . . . . . . . . . .   4
+       1.2. Requirements . . . . . . . . . . . . . . . . . . . . . .   4
+       1.3. Specifications . . . . . . . . . . . . . . . . . . . . .   4
+       1.4. Terminology  . . . . . . . . . . . . . . . . . . . . . .   5
+
+   2.  Notational Conventions and Generic Grammar. . . . . . . . . .   5
+       2.1. Augmented BNF  . . . . . . . . . . . . . . . . . . . . .   5
+       2.2. Basic Rules  . . . . . . . . . . . . . . . . . . . . . .   6
+       2.3. URL Encoding . . . . . . . . . . . . . . . . . . . . . .   7
+
+   3.  Invoking the Script . . . . . . . . . . . . . . . . . . . . .   8
+       3.1. Server Responsibilities  . . . . . . . . . . . . . . . .   8
+       3.2. Script Selection . . . . . . . . . . . . . . . . . . . .   9
+       3.3. The Script-URI . . . . . . . . . . . . . . . . . . . . .   9
+       3.4. Execution  . . . . . . . . . . . . . . . . . . . . . . .  10
+
+   4.  The CGI Request . . . . . . . . . . . . . . . . . . . . . . .  10
+       4.1. Request Meta-Variables . . . . . . . . . . . . . . . . .  10
+            4.1.1.  AUTH_TYPE. . . . . . . . . . . . . . . . . . . .  11
+            4.1.2.  CONTENT_LENGTH . . . . . . . . . . . . . . . . .  12
+            4.1.3.  CONTENT_TYPE . . . . . . . . . . . . . . . . . .  12
+            4.1.4.  GATEWAY_INTERFACE. . . . . . . . . . . . . . . .  13
+            4.1.5.  PATH_INFO. . . . . . . . . . . . . . . . . . . .  13
+            4.1.6.  PATH_TRANSLATED. . . . . . . . . . . . . . . . .  14
+            4.1.7.  QUERY_STRING . . . . . . . . . . . . . . . . . .  15
+            4.1.8.  REMOTE_ADDR. . . . . . . . . . . . . . . . . . .  15
+            4.1.9.  REMOTE_HOST. . . . . . . . . . . . . . . . . . .  16
+            4.1.10. REMOTE_IDENT . . . . . . . . . . . . . . . . . .  16
+            4.1.11. REMOTE_USER. . . . . . . . . . . . . . . . . . .  16
+            4.1.12. REQUEST_METHOD . . . . . . . . . . . . . . . . .  17
+            4.1.13. SCRIPT_NAME. . . . . . . . . . . . . . . . . . .  17
+            4.1.14. SERVER_NAME. . . . . . . . . . . . . . . . . . .  17
+            4.1.15. SERVER_PORT. . . . . . . . . . . . . . . . . . .  18
+            4.1.16. SERVER_PROTOCOL. . . . . . . . . . . . . . . . .  18
+            4.1.17. SERVER_SOFTWARE. . . . . . . . . . . . . . . . .  19
+            4.1.18. Protocol-Specific Meta-Variables . . . . . . . .  19
+       4.2. Request Message-Body . . . . . . . . . . . . . . . . . .  20
+       4.3. Request Methods  . . . . . . . . . . . . . . . . . . . .  20
+            4.3.1.  GET. . . . . . . . . . . . . . . . . . . . . . .  20
+            4.3.2.  POST . . . . . . . . . . . . . . . . . . . . . .  21
+            4.3.3.  HEAD . . . . . . . . . . . . . . . . . . . . . .  21
+            4.3.4.  Protocol-Specific Methods. . . . . . . . . . . .  21
+       4.4. The Script Command Line. . . . . . . . . . . . . . . . .  21
+
+
+
+
+
+Robinson & Coar              Informational                      [Page 2]
+
+RFC 3875                    CGI Version 1.1                 October 2004
+
+
+   5.  NPH Scripts . . . . . . . . . . . . . . . . . . . . . . . . .  22
+       5.1. Identification . . . . . . . . . . . . . . . . . . . . .  22
+       5.2. NPH Response . . . . . . . . . . . . . . . . . . . . . .  22
+
+   6.  CGI Response. . . . . . . . . . . . . . . . . . . . . . . . .  23
+       6.1. Response Handling. . . . . . . . . . . . . . . . . . . .  23
+       6.2. Response Types . . . . . . . . . . . . . . . . . . . . .  23
+            6.2.1.  Document Response. . . . . . . . . . . . . . . .  23
+            6.2.2.  Local Redirect Response. . . . . . . . . . . . .  24
+            6.2.3.  Client Redirect Response . . . . . . . . . . . .  24
+            6.2.4.  Client Redirect Response with Document . . . . .  24
+       6.3. Response Header Fields . . . . . . . . . . . . . . . . .  25

@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Base64;
 import java.lang.StringBuilder;
+import java.lang.Math;
 import java.io.IOException;
 import java.io.File;
 import java.io.FileInputStream;
@@ -47,8 +48,8 @@ public class DictLZW extends AbstractCompressor {
 
     /**
      * compress a file
-     * | original size | encoded bytes |
-     * |   8 bytes     |    ... ...    |
+     * | original size | encode length |encoded bytes |
+     * |   8 bytes     |    4 byte     |   ... ...    |
      * @return encoded size
      */
     @Override
@@ -85,7 +86,7 @@ public class DictLZW extends AbstractCompressor {
                     if (!map.containsKey(word.toString())) {
                         // write word to output
                         if (oldWord.length() == 1) {
-                            output.add((int)crtByte);
+                            output.add(((int)crtByte)&0xFF);
                         }
                         else {
                             output.add(map.get(oldWord).encode);
@@ -106,7 +107,7 @@ public class DictLZW extends AbstractCompressor {
                 else {
                     // reach EOF
                     if (word.length() == 1) {
-                        output.add((int)crtByte);
+                        output.add(((int)crtByte)&0xFF);
                     }
                     else {
                         output.add(map.get(word.toString()).encode);
@@ -123,14 +124,57 @@ public class DictLZW extends AbstractCompressor {
             bBuf.putLong(fileSize); // orignal file size
             outs.write(bBuf.array(), 0, 8);
 
+            // calculate encode word length
+            int wordLen = (int)Math.ceil(Math.log(map.size() + 256) / Math.log(2));
+            wordLen = (1 + (wordLen - 1) / 4) * 4;
+            bBuf = ByteBuffer.allocate(4);
+            bBuf.putInt(wordLen); // orignal file size
+            outs.write(bBuf.array(), 0, 4);
+            System.out.println("Map Size = " + map.size() + ", wordLen = " + wordLen);
+
             // write encoded bytes
-            compressedSize = output.size();
+            compressedSize = (int)(output.size() * wordLen / 8.0);
             System.out.println("Compressed Size = " + compressedSize);
+            int mask = (1<<wordLen) - 1;
+            int index = 0;
+            byte crtByte = 0;
             for (Integer code: output) {
-                //System.out.println("dumping: " + code);
-                bBuf = ByteBuffer.allocate(4);
-                bBuf.putInt(code); // orignal file size
-                outs.write(bBuf.array(), 0, 4);
+                //System.out.println("\ndumping: " + code);
+                if (wordLen%8 == 0) {
+                    for (int i = 0; i < wordLen / 8; i++) {
+                        crtByte = (byte)((code>>(i*8))&0xFF);
+                        outs.write(crtByte);
+                        //System.out.println("1 writing: " + crtByte);
+                    }
+                }
+                else {
+                    if (index == 4) {
+                        crtByte = (byte)(crtByte | ((byte)((code&0xF)<<4)));
+                        outs.write(crtByte);
+                        //System.out.println("2 writing: " + crtByte);
+                        for (int i = 0; i < wordLen / 8; i++) {
+                            crtByte = (byte)((code>>(i*8+index))&0xFF);
+                            outs.write(crtByte);
+                            //System.out.println("3 writing: " + crtByte);
+                        }
+                        index = 0;
+                    }
+                    else {
+                        int i = 0;
+                        for (i = 0; i < wordLen / 8; i++) {
+                            crtByte = (byte)((code>>(i*8+index))&0xFF);
+                            outs.write(crtByte);
+                            //System.out.println("3 writing: " + crtByte);
+                        }
+                        crtByte = (byte)((code>>(i*8))&0xF);
+                        //System.out.println("2 crtByte = " + crtByte);
+                        index = 4;
+                    }
+                }
+            }
+            if (index == 4) {
+                //System.out.println("4 writing: " + crtByte);
+                outs.write(crtByte);
             }
 
             ins.close();
@@ -172,6 +216,11 @@ public class DictLZW extends AbstractCompressor {
             File file = new File(zipFileName);
             compressedSize = file.length();
             setCompressRate(((double)compressedSize) / fileSize);
+
+            // read encode length
+            barray = new byte[4];
+            ins.read(barray, 0, 4);
+            int wordLen = ByteBuffer.wrap(barray).getInt();
             
             // output: decompressed file
             BufferedOutputStream outs = 
@@ -186,11 +235,39 @@ public class DictLZW extends AbstractCompressor {
             ArrayList<DictRecord> table = new ArrayList<DictRecord>();
             StringBuilder crtWord = new StringBuilder();
             byte[] lastEntry = null;
+            int readIndex = 0, encode = 0;
+            byte crtByte = 0;
             while (crtSize < fileSize) {
-                barray = new byte[4];
-                ins.read(barray, 0, 4);
-                int encode = ByteBuffer.wrap(barray).getInt();
-                //System.out.println("\nread: " + encode);
+                if (wordLen%8 == 0) {
+                    encode = 0;
+                    for (int i = 0; i < wordLen/8; i++) {
+                        crtByte = (byte)ins.read();
+                        encode = encode | ((((int)crtByte)&0xFF)<<(i*8));
+                    }
+                }
+                else {
+                    if (readIndex == 0) {
+                        int i = 0;
+                        encode = 0;
+                        for (i = 0; i < wordLen/8; i++) {
+                            crtByte = (byte)ins.read();
+                            encode = encode | ((((int)crtByte)&0xFF)<<(i*8+readIndex));
+                        }
+                        crtByte = (byte)ins.read();
+                        encode = encode | ((((int)crtByte)&0xF)<<(i*8));
+                        readIndex = 4;
+                    }
+                    else {
+                        encode = (((int)crtByte)>>4)&0xF;
+                        for (int i = 0; i < wordLen/8; i++) {
+                            crtByte = (byte)ins.read();
+                            encode = encode | ((((int)crtByte)&0xFF)<<(i*8+readIndex));
+                        }
+                        readIndex = 0;
+                    }
+                }
+                //System.out.println("\ndumping: " + encode);
+
                 byte[] entry = null;
                 if (encode < 256) {
                     outs.write((byte)encode);

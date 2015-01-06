@@ -3,10 +3,11 @@ package Compression;
 import java.util.Base64;
 import Compression.CompressService;
 import Compression.Compressors;
+import java.nio.ByteBuffer;
 
 public class CompressTest {
     public static void main(String[] args) throws Exception {
-        CompressService compressor = Compressors.newDictLZW("a.out");
+        CompressService compressor = Compressors.newDictLZW("LaserTower.bmp");
 
         compressor.compress();
         compressor.decompress();
