@@ -13,6 +13,8 @@ import java.io.IOException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.OutputStream;
+import java.io.InputStream;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.nio.ByteBuffer;
@@ -132,50 +134,11 @@ public class DictLZW extends AbstractCompressor {
             outs.write(bBuf.array(), 0, 4);
             System.out.println("Map Size = " + map.size() + ", wordLen = " + wordLen);
 
-            // write encoded bytes
+            // dump encoded bytes
             compressedSize = (int)(output.size() * wordLen / 8.0);
             System.out.println("Compressed Size = " + compressedSize);
-            int mask = (1<<wordLen) - 1;
-            int index = 0;
-            byte crtByte = 0;
-            for (Integer code: output) {
-                //System.out.println("\ndumping: " + code);
-                if (wordLen%8 == 0) {
-                    for (int i = 0; i < wordLen / 8; i++) {
-                        crtByte = (byte)((code>>(i*8))&0xFF);
-                        outs.write(crtByte);
-                        //System.out.println("1 writing: " + crtByte);
-                    }
-                }
-                else {
-                    if (index == 4) {
-                        crtByte = (byte)(crtByte | ((byte)((code&0xF)<<4)));
-                        outs.write(crtByte);
-                        //System.out.println("2 writing: " + crtByte);
-                        for (int i = 0; i < wordLen / 8; i++) {
-                            crtByte = (byte)((code>>(i*8+index))&0xFF);
-                            outs.write(crtByte);
-                            //System.out.println("3 writing: " + crtByte);
-                        }
-                        index = 0;
-                    }
-                    else {
-                        int i = 0;
-                        for (i = 0; i < wordLen / 8; i++) {
-                            crtByte = (byte)((code>>(i*8+index))&0xFF);
-                            outs.write(crtByte);
-                            //System.out.println("3 writing: " + crtByte);
-                        }
-                        crtByte = (byte)((code>>(i*8))&0xF);
-                        //System.out.println("2 crtByte = " + crtByte);
-                        index = 4;
-                    }
-                }
-            }
-            if (index == 4) {
-                //System.out.println("4 writing: " + crtByte);
-                outs.write(crtByte);
-            }
+            WordStream ws = new WordStream(wordLen, outs);
+            ws.dumpBytes(output);
 
             ins.close();
             outs.close();
@@ -233,39 +196,11 @@ public class DictLZW extends AbstractCompressor {
             // initialize byte count and prob distribution
             int crtSize = 0;
             ArrayList<DictRecord> table = new ArrayList<DictRecord>();
-            StringBuilder crtWord = new StringBuilder();
             byte[] lastEntry = null;
-            int readIndex = 0, encode = 0;
-            byte crtByte = 0;
+            
+            WordStream ws = new WordStream(wordLen, ins);
             while (crtSize < fileSize) {
-                if (wordLen%8 == 0) {
-                    encode = 0;
-                    for (int i = 0; i < wordLen/8; i++) {
-                        crtByte = (byte)ins.read();
-                        encode = encode | ((((int)crtByte)&0xFF)<<(i*8));
-                    }
-                }
-                else {
-                    if (readIndex == 0) {
-                        int i = 0;
-                        encode = 0;
-                        for (i = 0; i < wordLen/8; i++) {
-                            crtByte = (byte)ins.read();
-                            encode = encode | ((((int)crtByte)&0xFF)<<(i*8+readIndex));
-                        }
-                        crtByte = (byte)ins.read();
-                        encode = encode | ((((int)crtByte)&0xF)<<(i*8));
-                        readIndex = 4;
-                    }
-                    else {
-                        encode = (((int)crtByte)>>4)&0xF;
-                        for (int i = 0; i < wordLen/8; i++) {
-                            crtByte = (byte)ins.read();
-                            encode = encode | ((((int)crtByte)&0xFF)<<(i*8+readIndex));
-                        }
-                        readIndex = 0;
-                    }
-                }
+                int encode = ws.readNextWord();
                 //System.out.println("\ndumping: " + encode);
 
                 byte[] entry = null;
@@ -368,5 +303,139 @@ public class DictLZW extends AbstractCompressor {
         return start;
     }    
 
-    
+
+    class WordStream {
+        
+        int wordLen;
+        OutputStream outs;
+        InputStream ins;
+
+        int index;
+        byte crtByte;
+        int mask;
+
+        public WordStream(int wordLen, OutputStream outs) {
+            this.wordLen = wordLen;
+            this.outs = outs;
+            reset();
+        }
+
+        public WordStream(int wordLen, InputStream ins) {
+            this.wordLen = wordLen;
+            this.ins = ins;
+            reset();
+        }
+
+        public void reset() {
+            index = 0;
+            crtByte = 0;
+            mask = (1<<wordLen) - 1;
+        }
+
+        /**
+         * dump output as bytes with given word length
+         */
+        public void dumpNextWord(int code) throws IOException
+        {
+            //System.out.println("\ndumping: " + code);
+            if (wordLen%8 == 0) {
+                for (int i = 0; i < wordLen / 8; i++) {
+                    crtByte = (byte)((code>>(i*8))&0xFF);
+                    outs.write(crtByte);
+                    //System.out.println("1 writing: " + crtByte);
+                }
+            }
+            else {
+                if (index == 4) {
+                    crtByte = (byte)(crtByte | ((byte)((code&0xF)<<4)));
+                    outs.write(crtByte);
+                    //System.out.println("2 writing: " + crtByte);
+                    for (int i = 0; i < wordLen / 8; i++) {
+                        crtByte = (byte)((code>>(i*8+index))&0xFF);
+                        outs.write(crtByte);
+                        //System.out.println("3 writing: " + crtByte);
+                    }
+                    index = 0;
+                }
+                else {
+                    int i = 0;
+                    for (i = 0; i < wordLen / 8; i++) {
+                        crtByte = (byte)((code>>(i*8+index))&0xFF);
+                        outs.write(crtByte);
+                        //System.out.println("3 writing: " + crtByte);
+                    }
+                    crtByte = (byte)((code>>(i*8))&0xF);
+                    //System.out.println("2 crtByte = " + crtByte);
+                    index = 4;
+                }
+            }
+        }
+
+        public void finishDump() throws IOException {
+            if (index == 4) {
+                //System.out.println("4 writing: " + crtByte);
+                outs.write(crtByte);
+            }
+        }
+
+        public void dumpBytes(ArrayList<Integer> output) {
+            try{
+                for (Integer code: output) {
+                    dumpNextWord(code);
+                }
+                finishDump();
+            }
+            catch (IOException e) {
+               e.printStackTrace();
+            }
+            reset();
+        }
+
+        /**
+         *  read next word from input stream
+         */
+        public int readNextWord() {
+            try{
+                return readWord();
+            }
+            catch (IOException e) {
+               e.printStackTrace();
+            }
+            return -1;
+        }
+
+        private int readWord() throws IOException {
+            int encode = 0;
+            if (wordLen%8 == 0) {
+                encode = 0;
+                for (int i = 0; i < wordLen/8; i++) {
+                    crtByte = (byte)ins.read();
+                    encode = encode | ((((int)crtByte)&0xFF)<<(i*8));
+                }
+            }
+            else {
+                if (index == 0) {
+                    int i = 0;
+                    encode = 0;
+                    for (i = 0; i < wordLen/8; i++) {
+                        crtByte = (byte)ins.read();
+                        encode = encode | ((((int)crtByte)&0xFF)<<(i*8+index));
+                    }
+                    crtByte = (byte)ins.read();
+                    encode = encode | ((((int)crtByte)&0xF)<<(i*8));
+                    index = 4;
+                }
+                else {
+                    encode = (((int)crtByte)>>4)&0xF;
+                    for (int i = 0; i < wordLen/8; i++) {
+                        crtByte = (byte)ins.read();
+                        encode = encode | ((((int)crtByte)&0xFF)<<(i*8+index));
+                    }
+                    index = 0;
+                }
+            }
+            return encode;
+        }
+    }
+
 }
