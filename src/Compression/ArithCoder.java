@@ -90,7 +90,7 @@ public class ArithCoder extends AbstractCompressor {
                 //     System.out.printf("%d ", a);
                 // }
                 // System.out.println("\b]");
-                //System.out.println(rangeLow + " " + rangeHigh);
+                //System.out.println("[" + rangeLow + " " + rangeHigh + "]");
                 for (Integer a: bitsToWrite) {
                     crt = (byte)(crt|(a<<byteIndex));
                     byteIndex++;

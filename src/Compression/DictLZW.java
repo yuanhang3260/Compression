@@ -249,55 +249,7 @@ public class DictLZW extends AbstractCompressor {
         System.err.println("Done: Decompressed File Size = " + fileSize + " bytes");
         return fileSize;
     }
-
-
-    /**
-     * check bits to Write
-     * @return decompressed file size
-     */
-    private int checkBitsToWrite(double[] distri, int index,
-                                 ArrayList<Integer> bitsToWrite) 
-    {
-        // compare with higer bound of this interval
-        double rangeLow = distri[index];
-        double rangeHigh = index == 255? 1 : distri[index + 1];
-        int num1 = 0;
-        while (true) {
-            rangeLow *= 2;
-            rangeHigh *= 2;
-            if ((rangeLow >= 1 && rangeHigh  >= 1) || (rangeLow < 1 && rangeHigh < 1)) {
-                bitsToWrite.add((int)rangeLow);
-                rangeLow = rangeLow - (int)rangeLow; // remove non-faction part
-                rangeHigh = rangeHigh - (int)rangeHigh;
-                num1++;
-            }
-            else {
-                break;
-            }
-        }
-
-        return num1;
-    }
-
-
-    /**
-     * Serach a value in distribution array
-     * @return low range index
-     */
-    private int searchRange(double[] distri, double acc) {
-        int start = -1, end = distri.length;
-        // binary search
-        while (start < end - 1) {
-            int middle = (end + start) / 2;
-            if (acc >= distri[middle]) {
-                start = middle;
-            }
-            else {
-                end = middle;
-            }
-        }
-        return start;
-    }
+    
 
     /**
      *  WordStream: to read and write to file with word of given length
