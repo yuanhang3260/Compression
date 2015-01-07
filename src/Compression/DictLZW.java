@@ -121,25 +121,23 @@ public class DictLZW extends AbstractCompressor {
             BufferedOutputStream outs = 
                 new BufferedOutputStream(new FileOutputStream(zipFileName));
 
-            // write meta data
-            ByteBuffer bBuf = ByteBuffer.allocate(8);
-            bBuf.putLong(fileSize); // orignal file size
-            outs.write(bBuf.array(), 0, 8);
-
-            // calculate encode word length
+            // compute encode word length
             int wordLen = (int)Math.ceil(Math.log(map.size() + 256) / Math.log(2));
             wordLen = (1 + (wordLen - 1) / 4) * 4;
-            bBuf = ByteBuffer.allocate(4);
-            bBuf.putInt(wordLen); // orignal file size
-            outs.write(bBuf.array(), 0, 4);
-            System.out.println("Map Size = " + map.size() + ", wordLen = " + wordLen);
 
-            // dump encoded bytes
-            compressedSize = (int)(output.size() * wordLen / 8.0);
-            System.out.println("Compressed Size = " + compressedSize);
+            /* | original size | encode length |encoded bytes |
+             * |   8 bytes     |    4 byte     |   ... ...    |*/
             WordStream ws = new WordStream(wordLen, outs);
+            // write original file size
+            ws.dumpLong(fileSize);
+            // write word length
+            ws.dumpInt(wordLen);
+            // dump encoded bytes
             ws.dumpBytes(output);
-
+            
+            compressedSize = (int)(output.size() * wordLen / 8.0);
+            System.out.println("wordLen = " + wordLen);
+            System.out.println("Compressed Size = " + compressedSize);
             ins.close();
             outs.close();
         }
@@ -172,18 +170,17 @@ public class DictLZW extends AbstractCompressor {
             BufferedInputStream ins = 
                 new BufferedInputStream(new FileInputStream(zipFileName));
 
+            WordStream ws = new WordStream(0, ins);
+
             // read original file size
-            byte[] barray = new byte[8];
-            ins.read(barray, 0, 8);
-            fileSize = ByteBuffer.wrap(barray).getLong();
+            fileSize = ws.readLong();
             File file = new File(zipFileName);
             compressedSize = file.length();
             setCompressRate(((double)compressedSize) / fileSize);
 
             // read encode length
-            barray = new byte[4];
-            ins.read(barray, 0, 4);
-            int wordLen = ByteBuffer.wrap(barray).getInt();
+            int wordLen = ws.readInt();
+            ws.setWordLen(wordLen);
             
             // output: decompressed file
             BufferedOutputStream outs = 
@@ -198,7 +195,6 @@ public class DictLZW extends AbstractCompressor {
             ArrayList<DictRecord> table = new ArrayList<DictRecord>();
             byte[] lastEntry = null;
             
-            WordStream ws = new WordStream(wordLen, ins);
             while (crtSize < fileSize) {
                 int encode = ws.readNextWord();
                 //System.out.println("\ndumping: " + encode);
@@ -301,12 +297,14 @@ public class DictLZW extends AbstractCompressor {
             }
         }
         return start;
-    }    
+    }
 
-
+    /**
+     *  WordStream: to read and write to file with word of given length
+     */
     class WordStream {
         
-        int wordLen;
+        int wordLen; // word length must be a multiple of 4
         OutputStream outs;
         InputStream ins;
 
@@ -330,6 +328,64 @@ public class DictLZW extends AbstractCompressor {
             index = 0;
             crtByte = 0;
             mask = (1<<wordLen) - 1;
+        }
+
+        /**
+         * dump a long int
+         */
+        public void dumpLong(long num) {
+            try {
+                ByteBuffer bBuf = ByteBuffer.allocate(8);
+                bBuf.putLong(num); // orignal file size
+                outs.write(bBuf.array(), 0, 8);
+            }
+            catch (IOException e) {
+               e.printStackTrace();
+            }
+        }
+
+        /**
+         * dump an int
+         */
+        public void dumpInt(int num) {
+            try {
+                ByteBuffer bBuf = ByteBuffer.allocate(4);
+                bBuf.putInt(num); // orignal file size
+                outs.write(bBuf.array(), 0, 4);
+            }
+            catch (IOException e) {
+               e.printStackTrace();
+            }
+        }
+
+        /**
+         * read a long int
+         */
+        public long readLong() {
+            try {
+                byte[] barray = new byte[8];
+                ins.read(barray, 0, 8);
+                return ByteBuffer.wrap(barray).getLong();
+            }
+            catch (IOException e) {
+               e.printStackTrace();
+            }
+            return -1;
+        }
+
+        /**
+         * read an int
+         */
+        public int readInt() {
+            try {
+                byte[] barray = new byte[4];
+                ins.read(barray, 0, 4);
+                return ByteBuffer.wrap(barray).getInt();
+            }
+            catch (IOException e) {
+               e.printStackTrace();
+            }
+            return -1;
         }
 
         /**
@@ -435,6 +491,10 @@ public class DictLZW extends AbstractCompressor {
                 }
             }
             return encode;
+        }
+
+        public void setWordLen(int wordLen) {
+            this.wordLen = wordLen;
         }
     }
 
