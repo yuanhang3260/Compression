@@ -1,3 +1,5 @@
 Compression Library
 
 Implemented HuffmanTree Compressor
+            Arithmetic Encoder
+            LZW Dictionary Encoder
