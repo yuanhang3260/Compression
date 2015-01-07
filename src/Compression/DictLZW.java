@@ -134,7 +134,7 @@ public class DictLZW extends AbstractCompressor {
             ws.dumpInt(wordLen);
             // dump encoded bytes
             ws.dumpBytes(output);
-            
+
             compressedSize = (int)(output.size() * wordLen / 8.0);
             System.out.println("wordLen = " + wordLen);
             System.out.println("Compressed Size = " + compressedSize);
@@ -333,59 +333,37 @@ public class DictLZW extends AbstractCompressor {
         /**
          * dump a long int
          */
-        public void dumpLong(long num) {
-            try {
-                ByteBuffer bBuf = ByteBuffer.allocate(8);
-                bBuf.putLong(num); // orignal file size
-                outs.write(bBuf.array(), 0, 8);
-            }
-            catch (IOException e) {
-               e.printStackTrace();
-            }
+        public void dumpLong(long num) throws IOException {
+            ByteBuffer bBuf = ByteBuffer.allocate(8);
+            bBuf.putLong(num); // orignal file size
+            outs.write(bBuf.array(), 0, 8);
         }
 
         /**
          * dump an int
          */
-        public void dumpInt(int num) {
-            try {
-                ByteBuffer bBuf = ByteBuffer.allocate(4);
-                bBuf.putInt(num); // orignal file size
-                outs.write(bBuf.array(), 0, 4);
-            }
-            catch (IOException e) {
-               e.printStackTrace();
-            }
+        public void dumpInt(int num) throws IOException {
+            ByteBuffer bBuf = ByteBuffer.allocate(4);
+            bBuf.putInt(num); // orignal file size
+            outs.write(bBuf.array(), 0, 4);
         }
 
         /**
          * read a long int
          */
-        public long readLong() {
-            try {
-                byte[] barray = new byte[8];
-                ins.read(barray, 0, 8);
-                return ByteBuffer.wrap(barray).getLong();
-            }
-            catch (IOException e) {
-               e.printStackTrace();
-            }
-            return -1;
+        public long readLong() throws IOException {
+            byte[] barray = new byte[8];
+            ins.read(barray, 0, 8);
+            return ByteBuffer.wrap(barray).getLong();
         }
 
         /**
          * read an int
          */
-        public int readInt() {
-            try {
-                byte[] barray = new byte[4];
-                ins.read(barray, 0, 4);
-                return ByteBuffer.wrap(barray).getInt();
-            }
-            catch (IOException e) {
-               e.printStackTrace();
-            }
-            return -1;
+        public int readInt() throws IOException {
+            byte[] barray = new byte[4];
+            ins.read(barray, 0, 4);
+            return ByteBuffer.wrap(barray).getInt();
         }
 
         /**
@@ -434,16 +412,11 @@ public class DictLZW extends AbstractCompressor {
             }
         }
 
-        public void dumpBytes(ArrayList<Integer> output) {
-            try{
-                for (Integer code: output) {
-                    dumpNextWord(code);
-                }
-                finishDump();
+        public void dumpBytes(ArrayList<Integer> output) throws IOException {
+            for (Integer code: output) {
+                dumpNextWord(code);
             }
-            catch (IOException e) {
-               e.printStackTrace();
-            }
+            finishDump();
             reset();
         }
 
