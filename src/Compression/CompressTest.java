@@ -7,7 +7,7 @@ import java.nio.ByteBuffer;
 
 public class CompressTest {
     public static void main(String[] args) throws Exception {
-        CompressService compressor = Compressors.newDictLZW("LaserTower.bmp");
+        CompressService compressor = Compressors.newArithCoder("LaserTower.bmp");
 
         compressor.compress();
         compressor.decompress();

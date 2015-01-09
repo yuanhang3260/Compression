@@ -20,6 +20,15 @@ import Compression.AbstractCompressor;
  */
 public class ArithCoder extends AbstractCompressor {
 
+    class Interval {
+        double lowBound;
+        double highBound;
+        public Interval(double lowBound, double highBound) {
+            this.lowBound = lowBound;
+            this.highBound = highBound;
+        }
+    }
+
     /**
      * constructor
      * @param fileName file to be compressed
@@ -69,17 +78,20 @@ public class ArithCoder extends AbstractCompressor {
 
             byte crt = 0; // byte buf
             int byteIndex = 0; // bit index in byte buf
-            double rangeLow = 0, rangeHigh = 1;
+            Interval interval = new Interval(0, 1);
             ArrayList<Integer> bitsToWrite = new ArrayList<Integer>();
             for (int i = 0; i < fileSize; i++) {
-                System.out.println(i);
+                //System.out.println(i);
                 byte b = (byte)ins.read();
                 int index = (int)(b&0x0FF);
+                interval.lowBound = distri[index];
+                interval.highBound = index == 255? interval.highBound : distri[index + 1];
+                System.out.println("***[" + interval.lowBound + " " + interval.highBound + "]***");
                 
                 // try to write encoded bits if possible
                 int bitsWritten = 0;
                 try {
-                    bitsWritten = checkBitsToWrite(distri, index, bitsToWrite);
+                    bitsWritten = checkBitsToWrite(interval, bitsToWrite);
                 }
                 catch (PrecisionException e) {
                     e.printStackTrace();
@@ -90,7 +102,6 @@ public class ArithCoder extends AbstractCompressor {
                 //     System.out.printf("%d ", a);
                 // }
                 // System.out.println("\b]");
-                //System.out.println("[" + rangeLow + " " + rangeHigh + "]");
                 for (Integer a: bitsToWrite) {
                     crt = (byte)(crt|(a<<byteIndex));
                     byteIndex++;
@@ -106,25 +117,20 @@ public class ArithCoder extends AbstractCompressor {
                 bitsToWrite.clear();
 
                 // update range low and high
-                rangeLow = distri[index];
-                rangeHigh = index == 255? 1 : distri[index + 1];
-                rangeLow = rangeLow * Math.pow(2, bitsWritten);
-                rangeLow = rangeLow - (int)rangeLow; // remove non-faction part
-                rangeHigh = rangeHigh * Math.pow(2, bitsWritten);
-                rangeHigh = rangeHigh - (int)rangeHigh;
+                //System.out.println("[" + interval.lowBound + " " + interval.highBound + "]");
 
                 // update distribution and count arrays
                 cnts[index]++;
                 total++;
-                distri[0] = rangeLow;
+                distri[0] = interval.lowBound;
                 for (int j = 1; j < 256; j++) {
                     distri[j] = distri[j-1] 
-                                + (1.0 * cnts[j-1] / total) * (rangeHigh - rangeLow);
+                                + (1.0 * cnts[j-1] / total) * (interval.highBound - interval.lowBound);
                 }
             }
             // write trailing bits
-            if (rangeLow != rangeHigh) {
-                double middle = (rangeLow + rangeHigh) / 2;
+            if (interval.lowBound != interval.highBound) {
+                double middle = (interval.lowBound + interval.highBound) / 2;
                 while (middle > 0) {
                     middle *= 2;
                     int a = (int)middle;
@@ -208,41 +214,41 @@ public class ArithCoder extends AbstractCompressor {
             double acc = 0;
             byte crtByte = (byte)ins.read();
             int crtSize = 0, readSize = 3;
+            Interval interval = new Interval(0, 1);
             ArrayList<Integer> bitsToWrite = new ArrayList<Integer>();
             while (crtSize < fileSize && readSize <= compressedSize) {
-                int rangeLowIndex = searchRange(distri, acc);
-                double rangeLow = distri[rangeLowIndex];
-                double rangeHigh = rangeLowIndex == 255? 1 : distri[rangeLowIndex + 1];
-                //System.out.println("rangeLowIndex = " + rangeLowIndex + ", [" + rangeLow + " " + rangeHigh + "]");
-                if ((acc + 1.0 / exp) <= rangeHigh) {
+                int lowBoundIndex = searchRange(distri, acc);
+                interval.lowBound = distri[lowBoundIndex];
+                interval.highBound = lowBoundIndex == 255? interval.highBound : distri[lowBoundIndex + 1];
+                if ((acc + 1.0 / exp) <= interval.highBound) {
                     // write a decoded byte
-                    outs.write((byte)rangeLowIndex);
+                    outs.write((byte)lowBoundIndex);
                     crtSize++;
-                    //System.out.println("\nproduce byte: " + (byte)rangeLowIndex);
+                    //System.out.println("\nproduce byte: " + (byte)lowBoundIndex);
                     int bitsWritten = 0;
                     try {
-                        bitsWritten = checkBitsToWrite(distri, rangeLowIndex, bitsToWrite);
+                        bitsWritten = checkBitsToWrite(interval, bitsToWrite);
                     }
                     catch (PrecisionException e) {
                         e.printStackTrace();
                         System.exit(1);
                     }
-                    rangeLow = rangeLow * Math.pow(2, bitsWritten);
-                    rangeLow = rangeLow - (int)rangeLow; // remove non-faction part
-                    rangeHigh = rangeHigh * Math.pow(2, bitsWritten);
-                    rangeHigh = rangeHigh - (int)rangeHigh;
+                    // lowBound = lowBound * Math.pow(2, bitsWritten);
+                    // lowBound = lowBound - (int)lowBound; // remove non-faction part
+                    // highBound = highBound * Math.pow(2, bitsWritten);
+                    // highBound = highBound - (int)highBound;
                     acc = acc * Math.pow(2, bitsWritten);
                     acc = acc - (int)acc;
                     exp /= Math.pow(2, bitsWritten);
                     bitsToWrite.clear();
                     //System.out.println("normalized acc = " + acc);
                     // update cnts and distribution arrays
-                    cnts[rangeLowIndex]++;
+                    cnts[lowBoundIndex]++;
                     total++;
-                    distri[0] = rangeLow;
+                    distri[0] = interval.lowBound;
                     for (int j = 1; j < 256; j++) {
                         distri[j] = distri[j-1] 
-                                  + (1.0 * cnts[j-1] / total) * (rangeHigh - rangeLow);
+                                  + (1.0 * cnts[j-1] / total) * (interval.highBound - interval.lowBound);
                     }
                 }
                 else {
@@ -279,27 +285,33 @@ public class ArithCoder extends AbstractCompressor {
      * check bits to Write
      * @return decompressed file size
      */
-    private int checkBitsToWrite(double[] distri, int index,
-                                 ArrayList<Integer> bitsToWrite) throws PrecisionException
+    private int checkBitsToWrite(Interval interval, ArrayList<Integer> bitsToWrite) 
+                throws PrecisionException
     {
-        // compare with higer bound of this interval
-        double rangeLow = distri[index];
-        double rangeHigh = index == 255? 1 : distri[index + 1];
-        if (rangeLow == rangeHigh) {
+        if (interval.highBound == 1) {
+            return 0;
+        }
+
+        if (interval.lowBound == interval.highBound) {
             //System.err.println("err");
-            throw new PrecisionException("\nrangeLow = rangeHigh = " + rangeLow);
+            throw new PrecisionException("\nlowBound = highBound = " + interval.lowBound);
         }
         int num1 = 0;
         while (true) {
-            rangeLow *= 2;
-            rangeHigh *= 2;
-            if ((rangeLow >= 1 && rangeHigh  >= 1) || (rangeLow < 1 && rangeHigh < 1)) {
-                bitsToWrite.add((int)rangeLow);
-                rangeLow = rangeLow - (int)rangeLow; // remove non-faction part
-                rangeHigh = rangeHigh - (int)rangeHigh;
+            //System.out.println("[" + lowBound + " " + highBound + "]");
+            interval.lowBound *= 2;
+            interval.highBound *= 2;
+            if ( (interval.lowBound >= 1 && interval.highBound  >= 1) 
+              || (interval.lowBound < 1 && interval.highBound < 1))
+            {
+                bitsToWrite.add((int)interval.lowBound);
+                interval.lowBound = interval.lowBound - (int)interval.lowBound; // remove non-faction part
+                interval.highBound = interval.highBound - (int)interval.highBound;
                 num1++;
             }
             else {
+                interval.lowBound /= 2;
+                interval.highBound /= 2;
                 break;
             }
         }
@@ -329,7 +341,7 @@ public class ArithCoder extends AbstractCompressor {
 
 
     /**
-     *  range precision exception: rangeLow = rangeHigh
+     *  range precision exception: lowBound = highBound
      */
     class PrecisionException extends Exception  
     {
