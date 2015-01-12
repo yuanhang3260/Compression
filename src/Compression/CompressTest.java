@@ -4,11 +4,12 @@ import java.util.Base64;
 import Compression.CompressService;
 import Compression.Compressors;
 import java.nio.ByteBuffer;
+import java.lang.Math;
 
 public class CompressTest {
     public static void main(String[] args) throws Exception {
-        CompressService compressor = Compressors.newArithCoder("LaserTower.bmp");
-
+        CompressService compressor = Compressors.newArithCoder(args[0]);
+        
         compressor.compress();
         compressor.decompress();
 

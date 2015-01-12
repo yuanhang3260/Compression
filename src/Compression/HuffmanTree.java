@@ -234,7 +234,7 @@ public class HuffmanTree extends AbstractCompressor {
            e.printStackTrace();
         }
 
-        System.err.println("Done: Decompressed File Size = " + fileSize + " bytes");
+        System.out.println("Done: Decompressed File Size = " + fileSize + " bytes");
         return fileSize;
     }
 

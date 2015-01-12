@@ -71,8 +71,8 @@ public class ArithCoder extends AbstractCompressor {
             Arrays.fill(cnts, 1);
             int total = 256;
 
-            double[] distri = new double[256];
-            for (int i = 1; i < 256; i++) {
+            double[] distri = new double[257];
+            for (int i = 1; i < 257; i++) {
                 distri[i] = distri[i-1] + 1.0 / 256;
             }
 
@@ -84,9 +84,10 @@ public class ArithCoder extends AbstractCompressor {
                 //System.out.println(i);
                 byte b = (byte)ins.read();
                 int index = (int)(b&0x0FF);
+                //System.out.println("index = " + index);
                 interval.lowBound = distri[index];
-                interval.highBound = index == 255? interval.highBound : distri[index + 1];
-                System.out.println("***[" + interval.lowBound + " " + interval.highBound + "]***");
+                interval.highBound = distri[index+1];
+                //System.out.println("[" + interval.lowBound + " " + interval.highBound + "]");
                 
                 // try to write encoded bits if possible
                 int bitsWritten = 0;
@@ -97,18 +98,19 @@ public class ArithCoder extends AbstractCompressor {
                     e.printStackTrace();
                     System.exit(1);
                 }
-                //System.out.printf("Got %d bits: [", bitsWritten);
+                // System.out.printf("Got %d bits: [", bitsWritten);
                 // for (Integer a: bitsToWrite) {
                 //     System.out.printf("%d ", a);
                 // }
                 // System.out.println("\b]");
+                // System.out.println("***[" + interval.lowBound + " " + interval.highBound + "]***");
                 for (Integer a: bitsToWrite) {
                     crt = (byte)(crt|(a<<byteIndex));
                     byteIndex++;
                     if (byteIndex == 8) {
                         // write this byte to .art file and reset byte buf
                         outs.write(crt);
-                        //System.out.println("dumping byte: " + crt);
+                        //System.out.println("dumping byte: " + Integer.toHexString(crt&0xFF).toUpperCase());
                         crt = 0;
                         byteIndex = 0;
                         compressedSize++;
@@ -116,17 +118,15 @@ public class ArithCoder extends AbstractCompressor {
                 }
                 bitsToWrite.clear();
 
-                // update range low and high
-                //System.out.println("[" + interval.lowBound + " " + interval.highBound + "]");
-
                 // update distribution and count arrays
                 cnts[index]++;
                 total++;
                 distri[0] = interval.lowBound;
-                for (int j = 1; j < 256; j++) {
+                for (int j = 1; j < 257; j++) {
                     distri[j] = distri[j-1] 
                                 + (1.0 * cnts[j-1] / total) * (interval.highBound - interval.lowBound);
                 }
+                //System.out.println();
             }
             // write trailing bits
             if (interval.lowBound != interval.highBound) {
@@ -203,28 +203,36 @@ public class ArithCoder extends AbstractCompressor {
             Arrays.fill(cnts, 1);
             int total = 256;
 
-            double[] distri = new double[256];
-            for (int i = 1; i < 256; i++) {
+            double[] distri = new double[257];
+            for (int i = 1; i < 257; i++) {
                 distri[i] = distri[i-1] + 1.0 / 256;
             }
 
             // start decoding
             int byteIndex = 0;
-            int exp = 1;
+            double exp = 1;
             double acc = 0;
             byte crtByte = (byte)ins.read();
-            int crtSize = 0, readSize = 3;
+            int crtSize = 0, readSize = 1;
             Interval interval = new Interval(0, 1);
             ArrayList<Integer> bitsToWrite = new ArrayList<Integer>();
             while (crtSize < fileSize && readSize <= compressedSize) {
                 int lowBoundIndex = searchRange(distri, acc);
+                //System.out.println(lowBoundIndex);
+                
                 interval.lowBound = distri[lowBoundIndex];
-                interval.highBound = lowBoundIndex == 255? interval.highBound : distri[lowBoundIndex + 1];
+                interval.highBound = distri[lowBoundIndex + 1];
+                //System.out.println("exp = " + exp + " acc = " + acc + " in [" + interval.lowBound + ", " + interval.highBound+ "]");
+                
+                if (interval.lowBound == interval.highBound) {
+                    //System.out.println("lowBoundIndex = " + lowBoundIndex + " " + cnts[lowBoundIndex-1] + " " + total);
+                }
                 if ((acc + 1.0 / exp) <= interval.highBound) {
                     // write a decoded byte
                     outs.write((byte)lowBoundIndex);
                     crtSize++;
-                    //System.out.println("\nproduce byte: " + (byte)lowBoundIndex);
+                    //System.out.println("produce byte: " + (byte)lowBoundIndex);
+                    //System.out.println("acc = " + acc + ", [" + interval.lowBound + ", " + interval.highBound+ "]");
                     int bitsWritten = 0;
                     try {
                         bitsWritten = checkBitsToWrite(interval, bitsToWrite);
@@ -233,20 +241,18 @@ public class ArithCoder extends AbstractCompressor {
                         e.printStackTrace();
                         System.exit(1);
                     }
-                    // lowBound = lowBound * Math.pow(2, bitsWritten);
-                    // lowBound = lowBound - (int)lowBound; // remove non-faction part
-                    // highBound = highBound * Math.pow(2, bitsWritten);
-                    // highBound = highBound - (int)highBound;
-                    acc = acc * Math.pow(2, bitsWritten);
-                    acc = acc - (int)acc;
+                    //System.out.println(bitsWritten + " " + Math.pow(2, bitsWritten) + " acc = " + acc);
+                    acc = powFraction(acc, bitsWritten);
                     exp /= Math.pow(2, bitsWritten);
+                    //makeSystem.out.println("** acc = " + acc + ", [" + interval.lowBound + ", " + interval.highBound+ "]");
+                    //System.out.println(acc + "  " + exp);
                     bitsToWrite.clear();
                     //System.out.println("normalized acc = " + acc);
                     // update cnts and distribution arrays
                     cnts[lowBoundIndex]++;
                     total++;
                     distri[0] = interval.lowBound;
-                    for (int j = 1; j < 256; j++) {
+                    for (int j = 1; j < 257; j++) {
                         distri[j] = distri[j-1] 
                                   + (1.0 * cnts[j-1] / total) * (interval.highBound - interval.lowBound);
                     }
@@ -260,12 +266,12 @@ public class ArithCoder extends AbstractCompressor {
                     byteIndex++;
                     if (byteIndex == 8) {
                         crtByte = (byte)ins.read();
-                        //System.out.println("read byte: " + crtByte);
+                        //System.out.println("read byte: " + crtByte + ", readSize = " + readSize);
                         readSize++;
                         byteIndex = 0;
                     }
                 }
-
+                //System.out.println();
             } //end while
             
 
@@ -276,27 +282,46 @@ public class ArithCoder extends AbstractCompressor {
            e.printStackTrace();
         }
 
-        System.err.println("Done: Decompressed File Size = " + fileSize + " bytes");
+        System.out.println("Done: Decompressed File Size = " + fileSize + " bytes");
         return fileSize;
     }
 
-
-    /**
-     * check bits to Write
-     * @return decompressed file size
+    /*
+     * given a float number f and int num, return fraction(f * 2^num), 
      */
+    private double powFraction(double f, int num) {
+        for (int i = 0; i < num; i++) {
+            f *= 2;
+            f -= (int)f;
+        }
+        return f;
+    }
+
+    
     private int checkBitsToWrite(Interval interval, ArrayList<Integer> bitsToWrite) 
                 throws PrecisionException
     {
+        int num1 = 0;
         if (interval.highBound == 1) {
-            return 0;
+            while (interval.lowBound > 0) {
+                interval.lowBound *= 2;
+                int a = (int)interval.lowBound;
+                if (a == 0) {
+                    interval.lowBound /= 2;
+                    break;
+                }
+                interval.lowBound -= a;
+                bitsToWrite.add((int)a);
+                num1++;
+            }
+            interval.highBound = 1;
+            return num1;
         }
 
         if (interval.lowBound == interval.highBound) {
             //System.err.println("err");
             throw new PrecisionException("\nlowBound = highBound = " + interval.lowBound);
         }
-        int num1 = 0;
         while (true) {
             //System.out.println("[" + lowBound + " " + highBound + "]");
             interval.lowBound *= 2;
@@ -310,12 +335,30 @@ public class ArithCoder extends AbstractCompressor {
                 num1++;
             }
             else {
-                interval.lowBound /= 2;
-                interval.highBound /= 2;
+                if (interval.highBound > 1) {
+                    interval.lowBound /= 2;
+                    interval.highBound /= 2;
+                }
+                else {
+                    // higher bound has no trailing bits
+                    bitsToWrite.add(0);
+                    num1++;
+                    while (interval.lowBound > 0) {
+                        interval.lowBound *= 2;
+                        int a = (int)interval.lowBound;
+                        if (a == 0) {
+                            interval.lowBound /= 2;
+                            break;
+                        }
+                        interval.lowBound -= a;
+                        bitsToWrite.add((int)a);
+                        num1++;
+                    }
+                    interval.highBound = 1;
+                }
                 break;
             }
         }
-
         return num1;
     }
 
@@ -326,6 +369,7 @@ public class ArithCoder extends AbstractCompressor {
      */
     private int searchRange(double[] distri, double acc) {
         int start = -1, end = distri.length;
+        //System.out.println(distri[0] + " ~ " + distri[256] + ", search " + acc);
         // binary search
         while (start < end - 1) {
             int middle = (end + start) / 2;
