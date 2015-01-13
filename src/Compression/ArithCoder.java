@@ -84,11 +84,11 @@ public class ArithCoder extends AbstractCompressor {
                 //System.out.println(i);
                 byte b = (byte)ins.read();
                 int index = (int)(b&0x0FF);
-                //System.out.println("index = " + index);
                 interval.lowBound = distri[index];
                 interval.highBound = distri[index+1];
-                //System.out.println("[" + interval.lowBound + " " + interval.highBound + "]");
-                
+                // System.out.println("index = " + index);
+                // System.out.println("[" + interval.lowBound + " " + interval.highBound + "]");
+                       
                 // try to write encoded bits if possible
                 int bitsWritten = 0;
                 try {
@@ -126,7 +126,9 @@ public class ArithCoder extends AbstractCompressor {
                     distri[j] = distri[j-1] 
                                 + (1.0 * cnts[j-1] / total) * (interval.highBound - interval.lowBound);
                 }
-                //System.out.println();
+                distri[256] = interval.highBound;
+                // System.out.println(distri[0] + " ~ " + distri[256]);
+                // System.out.println();
             }
             // write trailing bits
             if (interval.lowBound != interval.highBound) {
@@ -223,16 +225,17 @@ public class ArithCoder extends AbstractCompressor {
                 interval.lowBound = distri[lowBoundIndex];
                 interval.highBound = distri[lowBoundIndex + 1];
                 //System.out.println("exp = " + exp + " acc = " + acc + " in [" + interval.lowBound + ", " + interval.highBound+ "]");
-                
+
                 if (interval.lowBound == interval.highBound) {
                     //System.out.println("lowBoundIndex = " + lowBoundIndex + " " + cnts[lowBoundIndex-1] + " " + total);
                 }
+                //double tmpLow = interval.lowBound, tmpHigh = interval.highBound, tmpacc = acc;
                 if ((acc + 1.0 / exp) <= interval.highBound) {
                     // write a decoded byte
                     outs.write((byte)lowBoundIndex);
                     crtSize++;
-                    //System.out.println("produce byte: " + (byte)lowBoundIndex);
-                    //System.out.println("acc = " + acc + ", [" + interval.lowBound + ", " + interval.highBound+ "]");
+                    //System.out.println(crtSize);
+                    //System.out.println("produce byte: " + lowBoundIndex);
                     int bitsWritten = 0;
                     try {
                         bitsWritten = checkBitsToWrite(interval, bitsToWrite);
@@ -241,13 +244,13 @@ public class ArithCoder extends AbstractCompressor {
                         e.printStackTrace();
                         System.exit(1);
                     }
-                    //System.out.println(bitsWritten + " " + Math.pow(2, bitsWritten) + " acc = " + acc);
-                    acc = powFraction(acc, bitsWritten);
+                    //System.out.println("acc = " + acc + ", exp = " + exp);
+                    acc = powFraction(acc, bitsWritten);            
                     exp /= Math.pow(2, bitsWritten);
-                    //makeSystem.out.println("** acc = " + acc + ", [" + interval.lowBound + ", " + interval.highBound+ "]");
-                    //System.out.println(acc + "  " + exp);
+                    //System.out.println("** acc = " + acc + ", [" + interval.lowBound + ", " + interval.highBound+ "]");
                     bitsToWrite.clear();
                     //System.out.println("normalized acc = " + acc);
+
                     // update cnts and distribution arrays
                     cnts[lowBoundIndex]++;
                     total++;
@@ -256,6 +259,7 @@ public class ArithCoder extends AbstractCompressor {
                         distri[j] = distri[j-1] 
                                   + (1.0 * cnts[j-1] / total) * (interval.highBound - interval.lowBound);
                     }
+                    distri[256] = interval.highBound;
                 }
                 else {
                     int bit = (crtByte>>byteIndex) & 0x1;
