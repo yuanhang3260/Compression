@@ -5,7 +5,7 @@ use File::Compare;
 
 $testFileName = $ARGV[0];
 
-system "java Compression.CompressTest $testFileName > /dev/null";
+system "java -cp classes Compression.CompressTest $testFileName > /dev/null";
 if (compare($testFileName, "$testFileName.out") != 0) {
     print "Error\n";
 }

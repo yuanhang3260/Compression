@@ -12,7 +12,7 @@ for ($count = 0; $count < 10000; $count++) {
         # print "$randNum\n";
     }
     close($out);
-    system "java Compression.CompressTest $testFileName > /dev/null";
+    system "java -cp ./classes Compression.CompressTest $testFileName > /dev/null";
     if (compare($testFileName, "$testFileName.out") != 0) {
         print "Error\n";
         last;
